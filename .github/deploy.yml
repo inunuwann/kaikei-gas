@@ -1,0 +1,33 @@
+name: Deploy GAS
+
+on:
+  push:
+    branches:
+      - main  # あなたのメインブランチ名に合わせてください（最近は main が主流）
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Create clasprc.json
+        run: echo "$CLASPRC_JSON" > ~/.clasprc.json
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+      - name: clasp push
+        # --force をつけることで、GASエディタ側で直接編集していても上書きします
+        run: npx clasp push --force
