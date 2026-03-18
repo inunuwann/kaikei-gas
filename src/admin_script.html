@@ -11,6 +11,15 @@
       this.isLoadingInquiries = false;
       this.expBody = document.getElementById('expBody');
       this.inqBody = document.getElementById('inqBody');
+      this.dateRangePicker = document.getElementById('filterDateRangePicker');
+      this.dateRangeTrigger = document.getElementById('filterDateRangeTrigger');
+      this.dateRangePopover = document.getElementById('filterDateRangePopover');
+      this.dateRangeGrid = document.getElementById('filterDateRangeGrid');
+      this.dateMonthLabel = document.getElementById('filterDateMonthLabel');
+      this.dateRangeSummary = document.getElementById('filterDateRangeSummary');
+      this.dateFromInput = document.getElementById('filterDateFrom');
+      this.dateToInput = document.getElementById('filterDateTo');
+      this.datePickerMonth = this.toMonthStart(new Date());
       this.logger.log('constructed', {
         hasBootstrapData: this.hasBootstrapData()
       });
@@ -27,6 +36,18 @@
       document
         .getElementById('filterAmountMode')
         .addEventListener('change', () => this.updateAmountFilterInputs());
+      this.dateRangeTrigger.addEventListener('click', (event) => this.handleDateRangeTriggerClick(event));
+      document
+        .getElementById('filterDatePrevMonth')
+        .addEventListener('click', () => this.shiftDatePickerMonth(-1));
+      document
+        .getElementById('filterDateNextMonth')
+        .addEventListener('click', () => this.shiftDatePickerMonth(1));
+      document
+        .getElementById('filterDateRangeClear')
+        .addEventListener('click', () => this.clearDateRange());
+      this.dateRangeGrid.addEventListener('click', (event) => this.handleDateRangeGridClick(event));
+      document.addEventListener('click', (event) => this.handleDocumentClick(event));
       this.expBody.addEventListener('change', (event) => this.handleStatusSelectChange(event));
       this.inqBody.addEventListener('change', (event) => this.handleStatusSelectChange(event));
 
@@ -268,8 +289,8 @@
 
     applyCriteriaToForm() {
       document.getElementById('filterId').value = this.criteria.idQuery || '';
-      document.getElementById('filterDateFrom').value = this.criteria.dateFrom || '';
-      document.getElementById('filterDateTo').value = this.criteria.dateTo || '';
+      this.dateFromInput.value = this.criteria.dateFrom || '';
+      this.dateToInput.value = this.criteria.dateTo || '';
       document.getElementById('filterContent').value = this.criteria.contentQuery || '';
       document.getElementById('filterAmountMode').value = this.criteria.amountMode || 'none';
       document.getElementById('filterAmountValue').value =
@@ -282,6 +303,9 @@
       document.getElementById('filterSortOrder').value = this.criteria.sortOrder || 'desc';
 
       this.updateAmountFilterInputs();
+      this.syncDatePickerMonth();
+      this.updateDateRangeTrigger();
+      this.renderDateRangePicker();
       this.applyCheckedValues('groupFilter', this.criteria.groups);
       this.applyCheckedValues('typeFilter', this.criteria.types);
     }
@@ -301,6 +325,210 @@
       amountValue.style.display =
         mode === 'exact' || mode === 'min' || mode === 'max' ? 'block' : 'none';
       amountRange.style.display = mode === 'range' ? 'grid' : 'none';
+    }
+
+    handleDateRangeTriggerClick(event) {
+      event.stopPropagation();
+      if (this.dateRangePopover.classList.contains('open')) {
+        this.closeDateRangePicker();
+        return;
+      }
+
+      this.openDateRangePicker();
+    }
+
+    handleDocumentClick(event) {
+      if (!this.dateRangePopover.classList.contains('open')) {
+        return;
+      }
+
+      if (this.dateRangePicker.contains(event.target)) {
+        return;
+      }
+
+      this.closeDateRangePicker();
+    }
+
+    openDateRangePicker() {
+      this.syncDatePickerMonth();
+      this.renderDateRangePicker();
+      this.dateRangePopover.classList.add('open');
+      this.logger.log('openDateRangePicker', {
+        dateFrom: this.criteria.dateFrom || null,
+        dateTo: this.criteria.dateTo || null
+      });
+    }
+
+    closeDateRangePicker() {
+      this.dateRangePopover.classList.remove('open');
+      this.logger.log('closeDateRangePicker');
+    }
+
+    shiftDatePickerMonth(offset) {
+      this.datePickerMonth = new Date(
+        this.datePickerMonth.getFullYear(),
+        this.datePickerMonth.getMonth() + offset,
+        1
+      );
+      this.renderDateRangePicker();
+    }
+
+    syncDatePickerMonth() {
+      const baseDateKey = this.criteria.dateFrom || this.criteria.dateTo || this.normalizeDateKey(new Date());
+      this.datePickerMonth = this.toMonthStart(this.parseDateKey(baseDateKey));
+    }
+
+    renderDateRangePicker() {
+      const monthStart = this.toMonthStart(this.datePickerMonth);
+      const year = monthStart.getFullYear();
+      const month = monthStart.getMonth();
+      const firstWeekday = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      this.dateMonthLabel.textContent = `${year}年${month + 1}月`;
+      this.dateRangeGrid.innerHTML = '';
+
+      const cells = [];
+      for (let blankIndex = 0; blankIndex < firstWeekday; blankIndex += 1) {
+        cells.push('<div class="date-range-day-empty"></div>');
+      }
+
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const dateKey = this.normalizeDateKey(new Date(year, month, day));
+        const isSelected =
+          dateKey === this.criteria.dateFrom || dateKey === this.criteria.dateTo;
+        const isInRange =
+          this.criteria.dateFrom &&
+          this.criteria.dateTo &&
+          this.criteria.dateFrom <= dateKey &&
+          dateKey <= this.criteria.dateTo;
+        const classNames = ['date-range-day'];
+        if (isInRange) {
+          classNames.push('is-in-range');
+        }
+        if (isSelected) {
+          classNames.push('is-selected');
+        }
+
+        cells.push(`
+          <button
+            type="button"
+            class="${classNames.join(' ')}"
+            data-date-key="${this.escapeAttribute(dateKey)}"
+          >
+            ${day}
+          </button>
+        `);
+      }
+
+      this.dateRangeGrid.innerHTML = cells.join('');
+      this.updateDateRangeSummary();
+    }
+
+    handleDateRangeGridClick(event) {
+      const button = event.target.closest('[data-date-key]');
+      if (!button) {
+        return;
+      }
+
+      const dateKey = button.dataset.dateKey;
+      if (!dateKey) {
+        return;
+      }
+
+      this.handleDateRangeSelection(dateKey);
+    }
+
+    handleDateRangeSelection(dateKey) {
+      const currentFrom = this.criteria.dateFrom;
+      const currentTo = this.criteria.dateTo;
+
+      this.logger.log('handleDateRangeSelection', {
+        selectedDate: dateKey,
+        currentFrom: currentFrom || null,
+        currentTo: currentTo || null
+      });
+
+      if (!currentFrom || !currentTo || currentFrom !== currentTo) {
+        this.setDateRange(dateKey, dateKey);
+        return;
+      }
+
+      if (dateKey < currentFrom) {
+        this.setDateRange(dateKey, dateKey);
+        return;
+      }
+
+      this.setDateRange(currentFrom, dateKey);
+      this.closeDateRangePicker();
+    }
+
+    setDateRange(dateFrom, dateTo) {
+      const normalizedFrom = this.normalizeDateKey(dateFrom);
+      const normalizedTo = this.normalizeDateKey(dateTo);
+      if (!normalizedFrom || !normalizedTo) {
+        return;
+      }
+
+      this.criteria.dateFrom = normalizedFrom <= normalizedTo ? normalizedFrom : normalizedTo;
+      this.criteria.dateTo = normalizedFrom <= normalizedTo ? normalizedTo : normalizedFrom;
+      this.applyCriteriaToForm();
+    }
+
+    clearDateRange() {
+      this.criteria.dateFrom = '';
+      this.criteria.dateTo = '';
+      this.applyCriteriaToForm();
+      this.logger.log('clearDateRange');
+    }
+
+    updateDateRangeTrigger() {
+      const hasDateRange = Boolean(this.criteria.dateFrom || this.criteria.dateTo);
+      this.dateRangeTrigger.classList.toggle('is-empty', !hasDateRange);
+
+      if (!hasDateRange) {
+        this.dateRangeTrigger.textContent = '期間を選択してください';
+        return;
+      }
+
+      if (this.criteria.dateFrom === this.criteria.dateTo) {
+        this.dateRangeTrigger.textContent = this.formatDateRangeDisplay(this.criteria.dateFrom);
+        return;
+      }
+
+      this.dateRangeTrigger.textContent = `${this.formatDateRangeDisplay(this.criteria.dateFrom)} - ${this.formatDateRangeDisplay(this.criteria.dateTo)}`;
+    }
+
+    updateDateRangeSummary() {
+      if (!this.criteria.dateFrom || !this.criteria.dateTo) {
+        this.dateRangeSummary.textContent = '開始日を選択してください';
+        return;
+      }
+
+      if (this.criteria.dateFrom === this.criteria.dateTo) {
+        this.dateRangeSummary.textContent = `${this.formatDateRangeDisplay(this.criteria.dateFrom)} を選択中です。別の日を選ぶと期間になります。`;
+        return;
+      }
+
+      this.dateRangeSummary.textContent = `${this.formatDateRangeDisplay(this.criteria.dateFrom)} 〜 ${this.formatDateRangeDisplay(this.criteria.dateTo)}`;
+    }
+
+    formatDateRangeDisplay(dateKey) {
+      return String(dateKey || '').replace(/-/g, '/');
+    }
+
+    parseDateKey(dateKey) {
+      const normalized = this.normalizeDateKey(dateKey);
+      if (!normalized) {
+        return new Date();
+      }
+
+      const [year, month, day] = normalized.split('-').map((value) => Number(value));
+      return new Date(year, month - 1, day);
+    }
+
+    toMonthStart(date) {
+      return new Date(date.getFullYear(), date.getMonth(), 1);
     }
 
     collectCriteriaFromForm() {
@@ -348,6 +576,14 @@
     normalizeDateKey(value) {
       if (!value) {
         return '';
+      }
+
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return [
+          value.getFullYear(),
+          String(value.getMonth() + 1).padStart(2, '0'),
+          String(value.getDate()).padStart(2, '0')
+        ].join('-');
       }
 
       const text = String(value).trim();

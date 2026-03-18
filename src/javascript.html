@@ -5,7 +5,7 @@
       this.tbody = tbody;
       this.grandTotalEl = grandTotalEl;
       this.allowedItems = Array.isArray(allowedItems) ? allowedItems : [];
-      this.requestType = '事後';
+      this.requestType = '事後請求';
       this.logger.log('constructed', {
         allowedItemCount: this.allowedItems.length
       });
@@ -16,7 +16,7 @@
     }
 
     reset(requestType) {
-      this.requestType = requestType || '事後';
+      this.requestType = requestType || '事後請求';
       this.tbody.innerHTML = '';
       this.addRows(3);
       this.calculateTotal();
@@ -136,7 +136,7 @@
 
     createRow() {
       const row = document.createElement('tr');
-      const freeInput = this.requestType === '事後' || this.requestType === '精算';
+      const freeInput = this.requestType === '事後請求' || this.requestType === '通常精算';
       row.innerHTML = `
         <td>${freeInput ? this.buildItemInput() : this.buildItemSelect()}</td>
         <td><input type="number" class="price-input input-sm" min="0" placeholder="0"></td>
@@ -292,7 +292,7 @@
         hasUnsettledData: Boolean(this.unsettledData)
       });
       if (!this.unsettledData) {
-        alert('現在、精算が必要な事前請求はありません。');
+        alert('現在、通常精算が必要な通常請求はありません。');
         return;
       }
 
@@ -318,7 +318,7 @@
       this.mode = 'application';
       const state = this.buildApplicationState();
       this.renderFormState(state);
-      this.itemsTable.reset(state.requestType || '事後');
+      this.itemsTable.reset(state.requestType || '事後請求');
       this.updateSummary();
       this.logger.log('applyApplicationMode', {
         requestType: state.requestType
@@ -329,7 +329,7 @@
       this.mode = 'settlement';
       const state = this.buildSettlementState();
       this.renderFormState(state);
-      this.itemsTable.reset('精算');
+      this.itemsTable.reset('通常精算');
       this.updateSummary();
       this.logger.log('applySettlementMode');
     }
@@ -342,8 +342,8 @@
         title: '支出申請',
         requestType: resolvedType,
         showTypeSelector: true,
-        showFileUpload: resolvedType === '事後',
-        fileRequired: resolvedType === '事後',
+        showFileUpload: resolvedType === '事後請求',
+        fileRequired: resolvedType === '事後請求',
         fileLabel: (this.bootstrap && this.bootstrap.receiptLabel) || '領収書(レシート)',
         fileAccept: (this.bootstrap && this.bootstrap.fileAccept) || 'application/pdf',
         settlementInfoVisible: false,
@@ -354,8 +354,8 @@
 
     buildSettlementState() {
       return {
-        title: '精算手続き',
-        requestType: '精算',
+        title: '通常精算手続き',
+        requestType: '通常精算',
         showTypeSelector: false,
         showFileUpload: true,
         fileRequired: true,
@@ -363,7 +363,7 @@
         fileAccept: (this.bootstrap && this.bootstrap.fileAccept) || 'application/pdf',
         settlementInfoVisible: true,
         budgetInfoVisible: false,
-        submitLabel: '精算する'
+        submitLabel: '通常精算する'
       };
     }
 
@@ -500,11 +500,11 @@
         if (balance >= 0) {
           this.balanceDisplay.textContent = `¥${balance.toLocaleString()}`;
           this.balanceDisplay.style.color = '#28a745';
-          this.submitBtn.textContent = '精算する';
+          this.submitBtn.textContent = '通常精算する';
         } else {
           this.balanceDisplay.textContent = `不足 ¥${Math.abs(balance).toLocaleString()}`;
           this.balanceDisplay.style.color = '#dc3545';
-          this.submitBtn.textContent = '精算（追加請求）';
+          this.submitBtn.textContent = '通常精算（追加請求）';
         }
 
         this.submitBtn.disabled = false;

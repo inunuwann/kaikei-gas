@@ -14,28 +14,28 @@ test('buildBootstrap exposes only application types and PDF receipt settings', (
   assert.equal(bootstrap.fileAccept, 'application/pdf');
   assert.deepEqual(
     bootstrap.applicationTypes.map((typeOption) => typeOption.value),
-    ['事後', '事前'],
+    ['通常請求', '事後請求'],
   );
 });
 
-test('application state hides receipt upload for advance requests', () => {
+test('application state hides receipt upload for standard requests', () => {
   const state = UserFormViewModelFactory.buildState(
     'application',
     {
       requestAvailability: createRequestAvailabilityMap(),
       unsettledItem: null,
     },
-    '事前',
+    '通常請求',
   );
 
   assert.equal(state.title, '支出申請');
-  assert.equal(state.requestType, '事前');
+  assert.equal(state.requestType, '通常請求');
   assert.equal(state.showTypeSelector, true);
   assert.equal(state.showFileUpload, false);
   assert.equal(state.fileRequired, false);
 });
 
-test('settlement state hides type selector and requires PDF receipt upload', () => {
+test('standard settlement state hides type selector and requires PDF receipt upload', () => {
   const state = UserFormViewModelFactory.buildState('settlement', {
     requestAvailability: createRequestAvailabilityMap(),
     unsettledItem: {
@@ -46,8 +46,8 @@ test('settlement state hides type selector and requires PDF receipt upload', () 
     },
   });
 
-  assert.equal(state.title, '精算手続き');
-  assert.equal(state.requestType, '精算');
+  assert.equal(state.title, '通常精算手続き');
+  assert.equal(state.requestType, '通常精算');
   assert.equal(state.showTypeSelector, false);
   assert.equal(state.showFileUpload, true);
   assert.equal(state.fileRequired, true);
@@ -58,7 +58,7 @@ test('settlement state hides type selector and requires PDF receipt upload', () 
 test('application state falls back to the available request type when reimbursement is blocked', () => {
   const state = UserFormViewModelFactory.buildState('application', {
     requestAvailability: createRequestAvailabilityMap({
-      事後: {
+      事後請求: {
         allowed: false,
         reason: '申請中の事後請求があるため、新しい事後請求はできません。',
         activeRecordId: 'EXP-20260318-120000',
@@ -67,15 +67,15 @@ test('application state falls back to the available request type when reimbursem
     unsettledItem: null,
   });
 
-  assert.equal(state.requestType, '事前');
+  assert.equal(state.requestType, '通常請求');
   assert.deepEqual(
     state.applicationTypes.map((typeOption) => ({
       value: typeOption.value,
       allowed: typeOption.allowed,
     })),
     [
-      { value: '事後', allowed: false },
-      { value: '事前', allowed: true },
+      { value: '通常請求', allowed: true },
+      { value: '事後請求', allowed: false },
     ],
   );
 });
@@ -83,12 +83,12 @@ test('application state falls back to the available request type when reimbursem
 test('hasAvailableApplicationType returns false when both request types are blocked', () => {
   const context = {
     requestAvailability: createRequestAvailabilityMap({
-      事前: {
+      通常請求: {
         allowed: false,
-        reason: '未完了の事前請求があるため、新しい事前請求はできません。',
+        reason: '未完了の通常請求があるため、新しい通常請求はできません。',
         activeRecordId: 'EXP-20260318-100000',
       },
-      事後: {
+      事後請求: {
         allowed: false,
         reason: '申請中の事後請求があるため、新しい事後請求はできません。',
         activeRecordId: 'EXP-20260318-120000',

@@ -12,7 +12,7 @@ const records = [
     date: new Date('2026-03-18T10:00:00+09:00'),
     dateKey: '2026-03-18',
     groupName: '団体A',
-    type: '事前',
+    type: '通常請求',
     amount: 5000,
     content: '備品購入',
   }),
@@ -21,7 +21,7 @@ const records = [
     date: new Date('2026-03-19T09:00:00+09:00'),
     dateKey: '2026-03-19',
     groupName: '団体B',
-    type: '事後',
+    type: '事後請求',
     amount: 3000,
     content: '交通費',
   }),
@@ -30,7 +30,7 @@ const records = [
     date: new Date('2026-03-20T08:00:00+09:00'),
     dateKey: '2026-03-20',
     groupName: '団体C',
-    type: '精算',
+    type: '通常精算',
     amount: 4500,
     content: '宿泊費',
   }),
@@ -39,7 +39,7 @@ const records = [
     date: new Date('2026-03-21T07:00:00+09:00'),
     dateKey: '2026-03-21',
     groupName: '団体A',
-    type: '事後',
+    type: '事後請求',
     amount: 2000,
     content: '資料印刷',
   }),
@@ -65,7 +65,7 @@ test('filters by inclusive date range', () => {
 test('filters by multiple groups and multiple types', () => {
   const result = service.filterAndSort(records, {
     groups: ['団体A', '団体C'],
-    types: ['精算', '事前'],
+    types: ['通常精算', '通常請求'],
   });
 
   assert.deepEqual(
@@ -176,6 +176,6 @@ test('sorts by ID in ascending and descending order', () => {
 test('getFilterOptions returns unique sorted group and type lists', () => {
   assert.deepEqual(service.getFilterOptions(records), {
     groups: ['団体A', '団体B', '団体C'],
-    types: ['事後', '事前', '精算'],
+    types: ['事後請求', '通常精算', '通常請求'],
   });
 });

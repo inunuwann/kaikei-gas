@@ -14,7 +14,7 @@ export function createRecord(
     dateKey: overrides.dateKey ?? toDateKey(date),
     groupId: overrides.groupId ?? 'group-a',
     groupName: overrides.groupName ?? '団体A',
-    type: overrides.type ?? '事後',
+    type: overrides.type ?? '事後請求',
     status: overrides.status ?? '申請中',
     amount: overrides.amount ?? 1000,
     content: overrides.content ?? '交通費 (詳細あり)',
@@ -28,17 +28,17 @@ export function createRequestAvailabilityMap(
   overrides?: Partial<RequestAvailabilityMap>,
 ): RequestAvailabilityMap {
   return {
-    事前: {
+    通常請求: {
       allowed: true,
       reason: null,
       activeRecordId: null,
-      ...(overrides?.事前 ?? {}),
+      ...(overrides?.通常請求 ?? {}),
     },
-    事後: {
+    事後請求: {
       allowed: true,
       reason: null,
       activeRecordId: null,
-      ...(overrides?.事後 ?? {}),
+      ...(overrides?.事後請求 ?? {}),
     },
   };
 }

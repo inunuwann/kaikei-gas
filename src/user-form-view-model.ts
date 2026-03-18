@@ -2,6 +2,9 @@ import {
   APPLICATION_TYPE_OPTIONS,
   PDF_MIME_TYPE,
   RECEIPT_LABEL,
+  REIMBURSEMENT_REQUEST_TYPE,
+  SETTLEMENT_TYPE,
+  STANDARD_REQUEST_TYPE,
   type ApplicationRequestType,
   type RequestAvailabilityMap,
   type UnsettledItem,
@@ -19,7 +22,7 @@ export interface UserFormContext {
 export interface UserFormState {
   mode: UserFormMode;
   title: string;
-  requestType: ApplicationRequestType | '精算' | null;
+  requestType: ApplicationRequestType | typeof SETTLEMENT_TYPE | null;
   showTypeSelector: boolean;
   applicationTypes: UserFormTypeOption[];
   showFileUpload: boolean;
@@ -32,8 +35,8 @@ export interface UserFormState {
 }
 
 const TYPE_LABELS: Record<ApplicationRequestType, string> = {
-  事後: '事後請求（購入済）',
-  事前: '事前請求（これから購入）',
+  [STANDARD_REQUEST_TYPE]: STANDARD_REQUEST_TYPE,
+  [REIMBURSEMENT_REQUEST_TYPE]: REIMBURSEMENT_REQUEST_TYPE,
 };
 
 export class UserFormViewModelFactory {
@@ -56,8 +59,8 @@ export class UserFormViewModelFactory {
     if (mode === 'settlement') {
       return {
         mode,
-        title: '精算手続き',
-        requestType: '精算',
+        title: '通常精算手続き',
+        requestType: SETTLEMENT_TYPE,
         showTypeSelector: false,
         applicationTypes,
         showFileUpload: true,
@@ -66,12 +69,12 @@ export class UserFormViewModelFactory {
         fileAccept: PDF_MIME_TYPE,
         settlementInfoVisible: true,
         budgetInfoVisible: false,
-        submitLabel: '精算する',
+        submitLabel: '通常精算する',
       };
     }
 
     const resolvedType = this.resolveApplicationType(applicationTypes, selectedType);
-    const requiresReceipt = resolvedType === '事後';
+    const requiresReceipt = resolvedType === REIMBURSEMENT_REQUEST_TYPE;
 
     return {
       mode,

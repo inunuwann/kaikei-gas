@@ -78,6 +78,108 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
       }
+      .date-range-picker { position: relative; }
+      .date-range-trigger {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        background: #fff;
+        text-align: left;
+        cursor: pointer;
+        color: #1e293b;
+      }
+      .date-range-trigger.is-empty { color: #64748b; }
+      .date-range-popover {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        z-index: 30;
+        width: min(360px, 100%);
+        padding: 14px;
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 10px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+      }
+      .date-range-popover.open { display: block; }
+      .date-range-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .date-range-nav {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        border-radius: 6px;
+        width: 34px;
+        height: 34px;
+        cursor: pointer;
+      }
+      .date-range-month {
+        font-weight: bold;
+        color: #1e293b;
+      }
+      .date-range-weekdays,
+      .date-range-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .date-range-weekdays {
+        margin-bottom: 6px;
+        color: #64748b;
+        font-size: 0.8em;
+        text-align: center;
+      }
+      .date-range-day,
+      .date-range-day-empty {
+        min-height: 38px;
+      }
+      .date-range-day {
+        border: none;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+        color: #0f172a;
+      }
+      .date-range-day:hover { background: #e2e8f0; }
+      .date-range-day.is-selected {
+        background: #2563eb;
+        color: #fff;
+        font-weight: bold;
+      }
+      .date-range-day.is-in-range {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+      .date-range-day.is-selected.is-in-range {
+        background: #2563eb;
+        color: #fff;
+      }
+      .date-range-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .date-range-summary {
+        color: #475569;
+        font-size: 0.85em;
+      }
+      .date-range-clear {
+        border: none;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border-radius: 6px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-weight: bold;
+      }
 
       .data-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
       .data-table th { background: #343a40; color: #fff; padding: 10px; position: sticky; top: 0; z-index: 1; }
@@ -117,13 +219,39 @@
             </div>
 
             <div class="filter-group">
-              <label for="filterDateFrom">日付検索（開始）</label>
-              <input id="filterDateFrom" class="form-control" type="date">
-            </div>
-
-            <div class="filter-group">
-              <label for="filterDateTo">日付検索（終了）</label>
-              <input id="filterDateTo" class="form-control" type="date">
+              <label for="filterDateRangeTrigger">日付検索</label>
+              <div class="date-range-picker" id="filterDateRangePicker">
+                <input id="filterDateFrom" type="hidden">
+                <input id="filterDateTo" type="hidden">
+                <button
+                  id="filterDateRangeTrigger"
+                  class="date-range-trigger is-empty"
+                  type="button"
+                >
+                  期間を選択してください
+                </button>
+                <div id="filterDateRangePopover" class="date-range-popover">
+                  <div class="date-range-header">
+                    <button id="filterDatePrevMonth" class="date-range-nav" type="button">‹</button>
+                    <div id="filterDateMonthLabel" class="date-range-month"></div>
+                    <button id="filterDateNextMonth" class="date-range-nav" type="button">›</button>
+                  </div>
+                  <div class="date-range-weekdays">
+                    <span>日</span>
+                    <span>月</span>
+                    <span>火</span>
+                    <span>水</span>
+                    <span>木</span>
+                    <span>金</span>
+                    <span>土</span>
+                  </div>
+                  <div id="filterDateRangeGrid" class="date-range-grid"></div>
+                  <div class="date-range-footer">
+                    <div id="filterDateRangeSummary" class="date-range-summary">開始日を選択してください</div>
+                    <button id="filterDateRangeClear" class="date-range-clear" type="button">クリア</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="filter-group">

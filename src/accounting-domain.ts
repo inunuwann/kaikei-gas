@@ -1,9 +1,24 @@
-export const APPLICATION_TYPE_OPTIONS = ['事後', '事前'] as const;
+export const STANDARD_REQUEST_TYPE = '通常請求';
+export const REIMBURSEMENT_REQUEST_TYPE = '事後請求';
+export const SETTLEMENT_TYPE = '通常精算';
+export const APPLICATION_TYPE_OPTIONS = [
+  STANDARD_REQUEST_TYPE,
+  REIMBURSEMENT_REQUEST_TYPE,
+] as const;
 export const RECEIPT_LABEL = '領収書(レシート)';
 export const PDF_MIME_TYPE = 'application/pdf';
 
 export type ApplicationRequestType = (typeof APPLICATION_TYPE_OPTIONS)[number];
-export type ExpenditureType = ApplicationRequestType | '精算';
+export type ExpenditureType = ApplicationRequestType | typeof SETTLEMENT_TYPE;
+
+const EXPENDITURE_TYPE_ALIASES = {
+  事前: STANDARD_REQUEST_TYPE,
+  事後: REIMBURSEMENT_REQUEST_TYPE,
+  精算: SETTLEMENT_TYPE,
+  [STANDARD_REQUEST_TYPE]: STANDARD_REQUEST_TYPE,
+  [REIMBURSEMENT_REQUEST_TYPE]: REIMBURSEMENT_REQUEST_TYPE,
+  [SETTLEMENT_TYPE]: SETTLEMENT_TYPE,
+} as const;
 
 export interface AllowedItem {
   name: string;
@@ -82,6 +97,20 @@ export interface UserFormBootstrap {
 
 export function isApplicationRequestType(value: string): value is ApplicationRequestType {
   return APPLICATION_TYPE_OPTIONS.some((type) => type === value);
+}
+
+export function normalizeApplicationRequestType(value: string): ApplicationRequestType | null {
+  const normalized = normalizeExpenditureType(value);
+  return isApplicationRequestType(normalized) ? normalized : null;
+}
+
+export function normalizeExpenditureType(value: string): ExpenditureType | string {
+  const trimmed = String(value ?? '').trim();
+  return EXPENDITURE_TYPE_ALIASES[trimmed as keyof typeof EXPENDITURE_TYPE_ALIASES] ?? trimmed;
+}
+
+export function getExpenditureTypeLabel(value: string): string {
+  return String(normalizeExpenditureType(value) ?? '').trim();
 }
 
 export function normalizeText(value: string | null | undefined): string {

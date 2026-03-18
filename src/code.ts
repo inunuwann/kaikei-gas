@@ -1,8 +1,12 @@
 import {
+  normalizeExpenditureType,
   PDF_MIME_TYPE,
+  SETTLEMENT_TYPE,
+  STANDARD_REQUEST_TYPE,
   type AllowedItem,
   type ExpenditureRecord,
   type InquiryRecord,
+  type RequestAvailabilityMap,
 } from './accounting-domain.ts';
 import { AdminDashboardService, type AdminSearchCriteriaInput } from './admin-dashboard-service.ts';
 import {
@@ -40,18 +44,7 @@ interface UserStatusViewData {
     content: string;
     date: string;
   } | null;
-  requestAvailability: {
-    事前: {
-      allowed: boolean;
-      reason: string | null;
-      activeRecordId: string | null;
-    };
-    事後: {
-      allowed: boolean;
-      reason: string | null;
-      activeRecordId: string | null;
-    };
-  };
+  requestAvailability: RequestAvailabilityMap;
   formBootstrap: ReturnType<typeof UserFormViewModelFactory.buildBootstrap>;
 }
 
@@ -339,7 +332,7 @@ function processForm(formObj: FormSubmissionInput) {
       throw new Error('利用者情報が見つかりません。');
     }
 
-    const requestType = String(formObj.type ?? '').trim();
+    const requestType = normalizeExpenditureType(String(formObj.type ?? '').trim());
     const totalAmount = Number(formObj.totalAmount);
     logger.log('input-parsed', {
       email: maskEmail(userEmail),
@@ -369,13 +362,13 @@ function processForm(formObj: FormSubmissionInput) {
       .getExpenditureRecords()
       .filter((record) => record.groupId === userInfo.groupId);
 
-    if (requestType === '精算') {
+    if (requestType === SETTLEMENT_TYPE) {
       ExpenditureRequestPolicy.assertCanStartSettlement(groupRecords);
     } else {
       ExpenditureRequestPolicy.assertCanCreateRequest(groupRecords, requestType);
     }
 
-    if (requestType !== '精算' && totalAmount > userInfo.remainingBudget) {
+    if (requestType !== SETTLEMENT_TYPE && totalAmount > userInfo.remainingBudget) {
       throw new Error('予算超過エラー');
     }
 
@@ -388,7 +381,7 @@ function processForm(formObj: FormSubmissionInput) {
     const newId = `EXP-${Utilities.formatDate(now, SCRIPT_TIME_ZONE, 'yyyyMMdd-HHmmss')}`;
     const fileUrl = saveAttachmentFile(newId, formObj);
     const simpleContent = items.map((item) => item.item).join(', ');
-    const initialStatus = requestType === '事前' ? '未精算' : '申請中';
+    const initialStatus = requestType === STANDARD_REQUEST_TYPE ? '未精算' : '申請中';
 
     expenditureSheet.appendRow([
       newId,

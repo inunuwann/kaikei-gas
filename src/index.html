@@ -29,7 +29,7 @@
           <span class="icon">💸</span> 支出申請へ
         </button>
         <button id="startSettlementBtn" class="btn-large btn-settlement" type="button">
-          <span class="icon">🧾</span> 精算する
+          <span class="icon">🧾</span> 通常精算する
         </button>
       </div>
 
@@ -81,9 +81,9 @@
       <h1 id="formTitle">支出申請</h1>
 
       <div id="settlementInfo" class="info-box settlement-box" style="display:none;">
-        <h3>精算計算</h3>
+        <h3>通常精算の計算</h3>
         <div class="budget-summary">
-          <div><span class="label">事前受取額</span><span class="value" id="preAmountDisplay">¥0</span></div>
+          <div><span class="label">通常請求額</span><span class="value" id="preAmountDisplay">¥0</span></div>
           <div class="calc-operator">-</div>
           <div><span class="label">実費合計</span><span class="value" id="settlementTotalDisplay">¥0</span></div>
           <div class="calc-operator">=</div>
@@ -97,7 +97,7 @@
 
       <form id="appForm">
         <input type="hidden" id="budgetLimit" value="<?= data.remainingBudget ?>">
-        <input type="hidden" id="requestTypeInput" value="事後">
+        <input type="hidden" id="requestTypeInput" value="事後請求">
 
         <div class="form-group" id="typeSelectGroup">
           <label for="typeSelect">申請タイプ</label>

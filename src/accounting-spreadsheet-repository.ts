@@ -1,4 +1,5 @@
 import {
+  normalizeExpenditureType,
   toDateKey,
   type AllowedItem,
   type ExpenditureRecord,
@@ -312,7 +313,7 @@ function mapExpenditureRow(
     dateKey: toDateKey(date) ?? '',
     groupId,
     groupName: groupNameMap.get(groupId) ?? groupId,
-    type: String(row[3] ?? ''),
+    type: normalizeExpenditureType(String(row[3] ?? '')),
     status: String(row[4] ?? ''),
     amount: Number(row[5]) || 0,
     content: String(row[6] ?? ''),

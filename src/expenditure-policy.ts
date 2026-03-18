@@ -1,8 +1,11 @@
 import {
   APPLICATION_TYPE_OPTIONS,
-  isApplicationRequestType,
   PDF_MIME_TYPE,
   RECEIPT_LABEL,
+  REIMBURSEMENT_REQUEST_TYPE,
+  SETTLEMENT_TYPE,
+  STANDARD_REQUEST_TYPE,
+  normalizeApplicationRequestType,
   stripDetailSuffix,
   type ApplicationRequestType,
   type AttachmentPayload,
@@ -14,15 +17,15 @@ import {
 } from './accounting-domain.ts';
 
 const ACTIVE_STATUSES_BY_TYPE: Record<ApplicationRequestType, Set<string>> = {
-  事前: new Set(['申請中', '承認済', '未精算']),
-  事後: new Set(['申請中']),
+  [STANDARD_REQUEST_TYPE]: new Set(['申請中', '承認済', '未精算']),
+  [REIMBURSEMENT_REQUEST_TYPE]: new Set(['申請中']),
 };
 
 const USED_BUDGET_STATUSES = new Set(['承認済', '精算完了']);
 
 const REQUEST_BLOCK_MESSAGES: Record<ApplicationRequestType, string> = {
-  事前: '未完了の事前請求があるため、新しい事前請求はできません。',
-  事後: '申請中の事後請求があるため、新しい事後請求はできません。',
+  [STANDARD_REQUEST_TYPE]: '未完了の通常請求があるため、新しい通常請求はできません。',
+  [REIMBURSEMENT_REQUEST_TYPE]: '申請中の事後請求があるため、新しい事後請求はできません。',
 };
 
 export interface GroupAccountingSummary {
@@ -55,11 +58,12 @@ export class ExpenditureRequestPolicy {
   }
 
   static assertCanCreateRequest(records: ExpenditureRecord[], type: string): void {
-    if (!isApplicationRequestType(type)) {
+    const normalizedType = normalizeApplicationRequestType(type);
+    if (!normalizedType) {
       throw new Error('不正な申請タイプです。');
     }
 
-    const availability = this.getRequestAvailability(records, type);
+    const availability = this.getRequestAvailability(records, normalizedType);
     if (!availability.allowed) {
       throw new Error(availability.reason ?? '現在この申請は作成できません。');
     }
@@ -67,12 +71,12 @@ export class ExpenditureRequestPolicy {
 
   static assertCanStartSettlement(records: ExpenditureRecord[]): void {
     if (!this.findUnsettledAdvance(records)) {
-      throw new Error('精算対象の事前請求が見つかりません。');
+      throw new Error('通常精算対象の通常請求が見つかりません。');
     }
   }
 
   static requiresAttachment(type: string): boolean {
-    return type === '事後' || type === '精算';
+    return type === REIMBURSEMENT_REQUEST_TYPE || type === SETTLEMENT_TYPE;
   }
 
   static validateAttachment(type: string, attachment: AttachmentPayload): void {
@@ -100,7 +104,7 @@ export class ExpenditureRequestPolicy {
     formatDate: (date: Date) => string = defaultDateFormatter,
   ): UnsettledItem | null {
     const candidates = records
-      .filter((record) => record.type === '事前' && record.status === '未精算')
+      .filter((record) => record.type === STANDARD_REQUEST_TYPE && record.status === '未精算')
       .sort(compareRecordsDesc);
 
     const target = candidates[0];
@@ -141,8 +145,11 @@ export class ExpenditureRequestPolicy {
       unsettledItem: this.findUnsettledAdvance(sorted, formatDate),
       history,
       requestAvailability: {
-        事前: this.getRequestAvailability(sorted, '事前'),
-        事後: this.getRequestAvailability(sorted, '事後'),
+        [STANDARD_REQUEST_TYPE]: this.getRequestAvailability(sorted, STANDARD_REQUEST_TYPE),
+        [REIMBURSEMENT_REQUEST_TYPE]: this.getRequestAvailability(
+          sorted,
+          REIMBURSEMENT_REQUEST_TYPE,
+        ),
       },
     };
   }
