@@ -2,3 +2,4 @@ node_modules/
 dist/
 mise.local.toml
 mise.*.local.toml
+docs/test-data/*
