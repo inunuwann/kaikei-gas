@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('css'); ?>
+  </head>
+  <body>
+    
+    <div id="view-dashboard" class="container">
+      <h1>会計ダッシュボード</h1>
+      
+      <div class="info-box">
+        <h2><?= data.groupName ?></h2>
+        <div class="budget-summary">
+          <div>
+            <span class="label">年度予算</span>
+            <span class="value">¥<?= data.budgetTotal.toLocaleString() ?></span>
+          </div>
+          <div>
+            <span class="label">現在の残高</span>
+            <span class="value highlight">¥<?= data.remainingBudget.toLocaleString() ?></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn-large btn-expenditure" onclick="startApplication()">
+          <span class="icon">💸</span> 支出申請へ
+        </button>
+        <button class="btn-large btn-settlement" onclick="startSettlement()">
+          <span class="icon">🧾</span> 精算する
+        </button>
+      </div>
+      
+      <div style="margin-top: 10px;">
+        <button class="btn-large btn-inquiry" onclick="switchView('inquiry')">
+          <span class="icon">📧</span> お問い合わせ
+        </button>
+      </div>
+
+      <h3>申請状況一覧</h3>
+      <div class="table-responsive">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>日付</th>
+              <th>タイプ</th>
+              <th>内容</th>
+              <th>金額</th>
+              <th>状況</th>
+            </tr>
+          </thead>
+          <tbody>
+            <? if (data.history && data.history.length > 0) { ?>
+              <? for (var i = 0; i < data.history.length; i++) { 
+                 var item = data.history[i];
+                 var statusClass = '';
+                 if(item.status === '承認済' || item.status === '精算完了') statusClass = 'status-ok';
+                 else if(item.status === '未精算') statusClass = 'status-warn';
+                 else if(item.status === '却下') statusClass = 'status-ng';
+              ?>
+                <tr>
+                  <td><?= item.date ?></td>
+                  <td><?= item.type ?></td>
+                  <td><?= item.content ?></td>
+                  <td>¥<?= item.amount.toLocaleString() ?></td>
+                  <td><span class="badge <?= statusClass ?>"><?= item.status ?></span></td>
+                </tr>
+              <? } ?>
+            <? } else { ?>
+              <tr><td colspan="5" style="text-align:center;">履歴はありません</td></tr>
+            <? } ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <div id="view-form" class="container" style="display:none;">
+      <button type="button" class="btn-back" onclick="switchView('dashboard')">← ホームに戻る</button>
+      <h1 id="formTitle">支出申請</h1>
+      
+      <div id="settlementInfo" class="info-box" style="display:none; background:#e8f5e9; border-left-color:#28a745;">
+        <h3>精算計算</h3>
+        <div class="budget-summary">
+          <div><span class="label">事前受取額</span><span class="value" id="preAmountDisplay">¥0</span></div>
+          <div style="font-size:1.5em; padding-top:5px;">-</div>
+          <div><span class="label">実費合計</span><span class="value" id="settlementTotalDisplay">¥0</span></div>
+          <div style="font-size:1.5em; padding-top:5px;">=</div>
+          <div><span class="label">お釣り</span><span class="value highlight" id="balanceDisplay" style="color:#28a745;">¥0</span></div>
+        </div>
+      </div>
+
+      <div id="budgetInfo" class="info-box" style="padding:10px;">
+        <p><strong>残高:</strong> ¥<?= data.remainingBudget.toLocaleString() ?></p>
+      </div>
+
+      <form id="appForm">
+        <input type="hidden" id="budgetLimit" value="<?= data.remainingBudget ?>">
+        <div class="form-group">
+          <label>申請タイプ</label>
+          <select name="type" id="typeSelect" class="form-control">
+             <option value="事後">事後請求（購入済）</option>
+             <option value="事前">事前請求（これから購入）</option>
+             <option value="精算" style="display:none;">事前申請の精算</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>支出内訳</label>
+          <div class="table-responsive">
+            <table id="itemsTable">
+              <thead>
+                <tr>
+                  <th style="width: 35%;">品目</th><th style="width: 20%;">単価</th><th style="width: 15%;">数量</th><th style="width: 20%;">小計</th><th style="width: 10%;"></th>
+                </tr>
+              </thead>
+              <tbody id="itemsBody"></tbody>
+              <tfoot>
+                <tr><td colspan="3" style="text-align:right; font-weight:bold;">合計</td><td id="grandTotal">0</td><td></td></tr>
+              </tfoot>
+            </table>
+          </div>
+          <button type="button" id="addRowBtn" class="btn-secondary">+ 行を追加</button>
+        </div>
+        <div class="form-group" id="fileUploadContainer">
+          <label>証憑（レシート） <span style="color:red; font-size:0.8em;">※必須</span></label>
+          <input type="file" id="fileInput" class="form-control" accept="image/*,application/pdf">
+        </div>
+        <button type="submit" id="submitBtn" class="btn-primary">申請する</button>
+        <div id="loader" class="loader" style="display:none;">処理中...</div>
+      </form>
+    </div>
+
+    <div id="view-inquiry" class="container" style="display:none;">
+      <button type="button" class="btn-back" onclick="switchView('dashboard')">← ホームに戻る</button>
+      <h1>お問い合わせ</h1>
+      <p class="info-text">予算やシステムに関する質問はこちらから送信してください。<br>執行部とあなた自身にメールが届きます。</p>
+      
+      <form id="inquiryForm">
+        <div class="form-group">
+          <label>件名</label>
+          <input type="text" name="subject" class="form-control" placeholder="例：予算の修正について" required>
+        </div>
+        <div class="form-group">
+          <label>お問い合わせ内容</label>
+          <textarea name="message" class="form-control" rows="6" placeholder="詳細を入力してください" required></textarea>
+        </div>
+        <button type="submit" id="inquirySubmitBtn" class="btn-primary" style="background-color: #f39c12; border-color: #e67e22;">送信する</button>
+        <div id="inquiryLoader" class="loader" style="display:none;">送信中...</div>
+      </form>
+    </div>
+
+    <script>
+      var ALLOWED_ITEMS = <?!= JSON.stringify(data.allowedItems) ?>;
+      var UNSETTLED_DATA = <?!= JSON.stringify(data.unsettledItem) ?>;
+    </script>
+    <?!= include('javascript'); ?>
+    <div style="text-align:center; margin-top:30px; font-size:0.8em;">
+  <a href="<?= ScriptApp.getService().getUrl() ?>?role=admin" style="color:#999;">管理者モードへ切替</a>
+</div>
+  </body>
+</html>

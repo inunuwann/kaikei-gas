@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: sans-serif; background-color: #f4f7f6; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+      .card { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+      h2 { color: #333; margin-bottom: 30px; }
+      p { color: #666; margin-bottom: 30px; }
+      
+      .btn { display: block; width: 100%; padding: 15px; margin-bottom: 15px; border: none; border-radius: 5px; font-size: 1.1em; font-weight: bold; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+      
+      .btn-user { background-color: #007bff; color: white; }
+      .btn-user:hover { background-color: #0056b3; }
+      
+      .btn-admin { background-color: #343a40; color: white; }
+      .btn-admin:hover { background-color: #23272b; }
+      
+      .email { font-size: 0.9em; color: #888; margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>ログイン権限の選択</h2>
+      <p>複数の権限を持っています。<br>どちらの画面で作業しますか？</p>
+      
+      <a href="<?= url ?>?role=user" class="btn btn-user">支出申請画面へ</a>
+      <a href="<?= url ?>?role=admin" class="btn btn-admin">管理者ダッシュボードへ</a>
+      
+      <div class="email">ログイン中: <?= email ?></div>
+    </div>
+  </body>
+</html>

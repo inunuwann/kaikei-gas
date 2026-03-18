@@ -1,0 +1,309 @@
+<script>
+  // ==========================================
+  // 1. 画面遷移・初期化ロジック
+  // ==========================================
+  function switchView(viewName) {
+    // 全画面を非表示にするリスト
+    const views = ['view-dashboard', 'view-form', 'view-inquiry'];
+    views.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    
+    // 指定画面を表示
+    const target = document.getElementById('view-' + viewName);
+    if (target) {
+      target.style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+  }
+
+  function startApplication() {
+    const typeSelect = document.getElementById('typeSelect');
+    const opts = typeSelect.options;
+    for(let i=0; i<opts.length; i++) {
+      if(opts[i].value === '精算') opts[i].style.display = 'none';
+      else opts[i].style.display = 'block';
+    }
+    typeSelect.value = '事後';
+    typeSelect.disabled = false;
+    switchView('form');
+    typeSelect.dispatchEvent(new Event('change'));
+  }
+
+  function startSettlement() {
+    if (!UNSETTLED_DATA) {
+      alert("現在、精算が必要な事前申請はありません。");
+      return;
+    }
+    const typeSelect = document.getElementById('typeSelect');
+    const opts = typeSelect.options;
+    for(let i=0; i<opts.length; i++) {
+      if(opts[i].value === '精算') opts[i].style.display = 'block';
+    }
+    typeSelect.value = '精算';
+    typeSelect.disabled = true; 
+    switchView('form');
+    typeSelect.dispatchEvent(new Event('change'));
+  }
+
+  // ==========================================
+  // 2. フォーム操作ロジック
+  // ==========================================
+  window.addEventListener('DOMContentLoaded', () => {
+    // 支出申請フォーム関連
+    const tbody = document.getElementById('itemsBody');
+    const grandTotalEl = document.getElementById('grandTotal');
+    const submitBtn = document.getElementById('submitBtn');
+    const typeSelect = document.getElementById('typeSelect');
+    const fileContainer = document.getElementById('fileUploadContainer');
+    const fileInput = document.getElementById('fileInput');
+    const addRowBtn = document.getElementById('addRowBtn');
+    
+    // お問い合わせフォーム関連
+    const inquiryForm = document.getElementById('inquiryForm');
+    const inquirySubmitBtn = document.getElementById('inquirySubmitBtn');
+    const inquiryLoader = document.getElementById('inquiryLoader');
+
+    // 精算表示用
+    const formTitle = document.getElementById('formTitle');
+    const settlementInfo = document.getElementById('settlementInfo');
+    const budgetInfo = document.getElementById('budgetInfo');
+    const preAmountDisplay = document.getElementById('preAmountDisplay');
+    const settlementTotalDisplay = document.getElementById('settlementTotalDisplay');
+    const balanceDisplay = document.getElementById('balanceDisplay');
+    const budgetLimitEl = document.getElementById('budgetLimit');
+    const budgetLimit = budgetLimitEl ? Number(budgetLimitEl.value) : 0;
+
+    // --- 初期化 ---
+    if (tbody) { handleTypeChange(); }
+    if (typeSelect) typeSelect.addEventListener('change', handleTypeChange);
+    if (addRowBtn) addRowBtn.addEventListener('click', () => addRows(1));
+    const appForm = document.getElementById('appForm');
+    if (appForm) { appForm.addEventListener('submit', handleFormSubmit); }
+    
+    // ★お問い合わせ送信処理
+    if (inquiryForm) {
+      inquiryForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        inquirySubmitBtn.disabled = true;
+        inquiryLoader.style.display = 'block';
+
+        const formObj = {
+          subject: inquiryForm.subject.value,
+          message: inquiryForm.message.value
+        };
+
+        google.script.run
+          .withSuccessHandler((res) => {
+            alert(res.message);
+            inquiryForm.reset();
+            inquirySubmitBtn.disabled = false;
+            inquiryLoader.style.display = 'none';
+            if (res.success) switchView('dashboard');
+          })
+          .withFailureHandler((err) => {
+            alert("エラー: " + err);
+            inquirySubmitBtn.disabled = false;
+            inquiryLoader.style.display = 'none';
+          })
+          .processInquiry(formObj);
+      });
+    }
+
+    // --- 以下、既存の支出申請ロジック ---
+    function handleTypeChange() {
+      const type = typeSelect.value;
+      tbody.innerHTML = ''; 
+      addRows(3); 
+      
+      if (type === '精算') {
+        formTitle.textContent = '精算手続き';
+        settlementInfo.style.display = 'block';
+        budgetInfo.style.display = 'none';
+        if (UNSETTLED_DATA) {
+          preAmountDisplay.textContent = '¥' + Number(UNSETTLED_DATA.amount).toLocaleString();
+        }
+        fileContainer.style.display = 'block';
+        fileInput.required = true;
+      } else {
+        formTitle.textContent = '支出申請';
+        settlementInfo.style.display = 'none';
+        budgetInfo.style.display = 'block';
+        if (type === '事前') {
+          fileContainer.style.display = 'none';
+          fileInput.value = ''; 
+          fileInput.required = false;
+        } else {
+          fileContainer.style.display = 'block';
+          fileInput.required = true;
+        }
+      }
+      calcTotal();
+    }
+
+    function addRows(count) {
+      const type = typeSelect.value;
+      const isFreeInput = (type === '事後' || type === '精算'); 
+      for (let i = 0; i < count; i++) {
+        const tr = document.createElement('tr');
+        let itemInputHtml = '';
+        if (isFreeInput) {
+          itemInputHtml = `<input type="text" class="item-input input-sm" placeholder="品名を入力" required>`;
+        } else {
+          let options = '<option value="">選択してください</option>';
+          if (typeof ALLOWED_ITEMS !== 'undefined') {
+            ALLOWED_ITEMS.forEach(item => {
+              options += `<option value="${item.name}" data-price="${item.defaultPrice || ''}">${item.name}</option>`;
+            });
+          }
+          itemInputHtml = `<select class="item-select input-sm" required>${options}</select>`;
+        }
+        tr.innerHTML = `<td>${itemInputHtml}</td><td><input type="number" class="price-input input-sm" min="0" placeholder="0"></td><td><input type="number" class="qty-input input-sm" min="1" value="1"></td><td class="subtotal">0</td><td><button type="button" class="del-btn" onclick="removeRow(this)">×</button></td>`;
+        tbody.appendChild(tr);
+      }
+      attachEvents();
+    }
+
+    function attachEvents() {
+      const inputs = document.querySelectorAll('.price-input, .qty-input, .item-select, .item-input');
+      inputs.forEach(input => {
+        input.oninput = calcTotal;
+        if (input.classList.contains('item-select')) {
+          input.onchange = function(e) {
+            const currentSelect = e.target;
+            if (checkDuplicate(currentSelect)) {
+              currentSelect.value = ""; 
+              resetRow(currentSelect);
+              calcTotal();
+              return;
+            }
+            const price = currentSelect.options[currentSelect.selectedIndex].dataset.price;
+            if (price) {
+              const row = currentSelect.closest('tr');
+              row.querySelector('.price-input').value = price;
+              calcTotal();
+            }
+          };
+        }
+      });
+    }
+    
+    function resetRow(element) {
+      const row = element.closest('tr');
+      row.querySelector('.price-input').value = "";
+      row.querySelector('.subtotal').textContent = "0";
+    }
+
+    function checkDuplicate(currentSelect) {
+      const selectedValue = currentSelect.value;
+      if (!selectedValue) return false; 
+      const allSelects = document.querySelectorAll('.item-select');
+      let isDuplicate = false;
+      allSelects.forEach(select => {
+        if (select !== currentSelect && select.value === selectedValue) { isDuplicate = true; }
+      });
+      if (isDuplicate) { alert(`「${selectedValue}」は既に入力されています。`); return true; }
+      return false;
+    }
+
+    window.removeRow = function(btn) {
+      if(tbody.rows.length > 1) { btn.closest('tr').remove(); calcTotal(); }
+    };
+
+    function calcTotal() {
+      let total = 0;
+      const rows = tbody.querySelectorAll('tr');
+      rows.forEach(row => {
+        const price = Number(row.querySelector('.price-input').value) || 0;
+        const qty = Number(row.querySelector('.qty-input').value) || 0;
+        const sub = price * qty;
+        row.querySelector('.subtotal').textContent = sub.toLocaleString();
+        total += sub;
+      });
+      grandTotalEl.textContent = total.toLocaleString();
+      grandTotalEl.dataset.value = total;
+
+      const type = typeSelect.value;
+      if (type === '精算' && typeof UNSETTLED_DATA !== 'undefined' && UNSETTLED_DATA) {
+        const preAmount = Number(UNSETTLED_DATA.amount);
+        const balance = preAmount - total;
+        if (settlementTotalDisplay) settlementTotalDisplay.textContent = '¥' + total.toLocaleString();
+        if (balance >= 0) {
+          balanceDisplay.textContent = '¥' + balance.toLocaleString();
+          balanceDisplay.style.color = '#28a745';
+          submitBtn.textContent = '精算する';
+        } else {
+          balanceDisplay.textContent = '不足 ¥' + Math.abs(balance).toLocaleString();
+          balanceDisplay.style.color = '#dc3545';
+          submitBtn.textContent = '精算（追加請求）';
+        }
+        submitBtn.disabled = false;
+        submitBtn.style.backgroundColor = '#007bff';
+        return;
+      }
+      if (type !== '精算' && total > budgetLimit) {
+        submitBtn.disabled = true;
+        grandTotalEl.style.color = 'red';
+        submitBtn.textContent = '予算オーバーです';
+        submitBtn.style.backgroundColor = '#dc3545';
+      } else {
+        submitBtn.disabled = false;
+        grandTotalEl.style.color = '#007bff';
+        submitBtn.textContent = '申請する';
+        submitBtn.style.backgroundColor = '#007bff';
+      }
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      document.getElementById('loader').style.display = 'block';
+      const items = [];
+      tbody.querySelectorAll('tr').forEach(row => {
+        const selectEl = row.querySelector('.item-select');
+        const inputEl = row.querySelector('.item-input');
+        const name = selectEl ? selectEl.value : (inputEl ? inputEl.value : '');
+        if(name) {
+          items.push({
+            item: name,
+            price: row.querySelector('.price-input').value,
+            qty: row.querySelector('.qty-input').value,
+            subtotal: row.querySelector('.subtotal').textContent.replace(/,/g, '')
+          });
+        }
+      });
+      if (items.length === 0) {
+        alert("少なくとも1つの品目を入力してください");
+        submitBtn.disabled = false;
+        document.getElementById('loader').style.display = 'none';
+        return;
+      }
+      const file = fileInput.files[0];
+      const sendData = (fileInfo) => {
+        const formObj = {
+          type: typeSelect.value,
+          totalAmount: grandTotalEl.dataset.value,
+          itemsJson: JSON.stringify(items),
+          fileName: fileInfo ? fileInfo.name : null,
+          fileData: fileInfo ? fileInfo.data : null,
+          mimeType: fileInfo ? fileInfo.mime : null
+        };
+        google.script.run
+          .withSuccessHandler((res) => {
+            if(res.success) { alert(res.message); location.reload(); }
+            else { alert(res.message); submitBtn.disabled = false; document.getElementById('loader').style.display = 'none'; }
+          })
+          .withFailureHandler((err) => { alert("エラー: " + err); submitBtn.disabled = false; document.getElementById('loader').style.display = 'none'; })
+          .processForm(formObj);
+      };
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          sendData({ name: file.name, data: ev.target.result.split(',')[1], mime: file.type });
+        };
+        reader.readAsDataURL(file);
+      } else { sendData(null); }
+    }
+  });
+</script>
