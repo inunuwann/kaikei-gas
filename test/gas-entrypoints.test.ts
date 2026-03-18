@@ -25,4 +25,5 @@ test('build output exposes GAS entrypoints globally', async () => {
   assert.match(builtCode, /getAdminDashboardBootstrap,/);
   assert.match(builtCode, /getInquiryDashboardData,/);
   assert.match(builtCode, /processForm,/);
+  assert.doesNotMatch(builtCode, /^\s+(?!return\b|break\b|continue\b)[A-Za-z_$][A-Za-z0-9_$]*;\s*$/m);
 });

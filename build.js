@@ -14,6 +14,7 @@ async function main() {
     entryPoints: [path.join(SRC_DIR, 'code.ts')],
     bundle: true,
     outfile: path.join(DIST_DIR, 'code.js'),
+    target: ['es2019'],
     plugins: [GasPlugin],
   });
 
