@@ -1,7 +1,64 @@
+min_version = "2025.6.8"
+
 [tools]
-# Node.js 24 を指定
-node = "24"
+# package-lock.json / 現在のローカル実行環境に合わせて Node を固定
+node = "22.14.0"
 
 [env]
 # GitHub Actions のランタイム警告を回避する環境変数をプロジェクトレベルで定義
 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 = "true"
+
+[tasks.install]
+description = "Install project dependencies with npm"
+run = "npm install"
+sources = ["package.json", "package-lock.json"]
+outputs = ["node_modules"]
+
+[tasks.ci-install]
+description = "Install project dependencies reproducibly for CI"
+run = "npm ci"
+sources = ["package.json", "package-lock.json"]
+outputs = ["node_modules"]
+
+[tasks.build]
+description = "Bundle GAS server code and copy HTML assets into dist/"
+run = "node build.js && cp src/*.html dist/"
+sources = [
+  "build.js",
+  "src/**/*.ts",
+  "src/**/*.html",
+  "tsconfig.json",
+  "package.json",
+  "package-lock.json",
+]
+outputs = ["dist"]
+
+[tasks.test]
+description = "Run the TypeScript tests with Node's strip-types runner"
+run = "node --experimental-strip-types --test test/*.test.ts"
+sources = [
+  "src/**/*.ts",
+  "test/**/*.ts",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+]
+outputs = { auto = true }
+
+[tasks.push]
+description = "Build and push the Apps Script project"
+depends = ["build"]
+tools."npm:@google/clasp" = "3.3.0"
+run = "clasp push"
+
+[tasks.deploy]
+description = "Build and force-push the Apps Script project"
+depends = ["build"]
+tools."npm:@google/clasp" = "3.3.0"
+run = "clasp push --force"
+
+[tasks.watch]
+description = "Build once and keep pushing changes to Apps Script"
+depends = ["build"]
+tools."npm:@google/clasp" = "3.3.0"
+run = "clasp push --watch"

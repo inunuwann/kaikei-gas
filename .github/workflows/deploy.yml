@@ -20,10 +20,10 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: npm install
+        run: mise run ci-install
 
       - name: Build project
-        run: npm run build
+        run: mise run build
 
       - name: Create clasprc.json
         run: echo "$CLASPRC_JSON" > ~/.clasprc.json
@@ -31,4 +31,4 @@ jobs:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
       - name: clasp push
-        run: npx clasp push --force
+        run: mise run deploy
