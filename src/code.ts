@@ -393,6 +393,17 @@ function include(filename: string) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+// GAS はエントリポイントをグローバル関数として解決する。
+// bundle 後も公開関数が残るように明示的に紐付ける。
+Object.assign(globalThis, {
+  doGet,
+  getAdminDashboardData,
+  updateStatus,
+  processForm,
+  processInquiry,
+  include,
+});
+
 function loadExpenditureRecords(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): ExpenditureRecord[] {
   const sheet = ss.getSheetByName('T_Expenditure');
   if (!sheet) {
