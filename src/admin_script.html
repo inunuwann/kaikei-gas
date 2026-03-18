@@ -3,6 +3,11 @@
     constructor() {
       this.criteria = this.createDefaultCriteria();
       this.filterOptions = { groups: [], types: [] };
+      this.expenditures = [];
+      this.inquiries = [];
+      this.activeTab = 'expenditure';
+      this.inquiriesLoaded = false;
+      this.isLoadingInquiries = false;
       this.expBody = document.getElementById('expBody');
       this.inqBody = document.getElementById('inqBody');
     }
@@ -10,17 +15,20 @@
     init() {
       document
         .getElementById('searchBtn')
-        .addEventListener('click', () => this.loadData(this.collectCriteriaFromForm()));
+        .addEventListener('click', () => this.applyFiltersFromForm());
       document
         .getElementById('resetBtn')
         .addEventListener('click', () => this.resetFilters());
       document
         .getElementById('filterAmountMode')
         .addEventListener('change', () => this.updateAmountFilterInputs());
+      this.expBody.addEventListener('change', (event) => this.handleStatusSelectChange(event));
+      this.inqBody.addEventListener('change', (event) => this.handleStatusSelectChange(event));
 
       this.applyCriteriaToForm();
       this.updateAmountFilterInputs();
-      this.loadData(this.criteria);
+      this.renderLoadingState();
+      this.loadBootstrap();
     }
 
     createDefaultCriteria() {
@@ -40,32 +48,98 @@
       };
     }
 
-    loadData(criteria) {
-      this.criteria = this.normalizeCriteria(criteria || this.criteria);
+    loadBootstrap() {
       this.renderLoadingState();
 
       google.script.run
-        .withSuccessHandler((data) => this.handleDashboardData(data))
-        .withFailureHandler((error) => {
-          const message = `読み込みエラー: ${error}`;
-          this.expBody.innerHTML = `<tr><td colspan="8" style="text-align:center;">${this.escapeHtml(message)}</td></tr>`;
-          this.inqBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">${this.escapeHtml(message)}</td></tr>`;
-        })
-        .getAdminDashboardData(this.criteria);
+        .withSuccessHandler((data) => this.handleBootstrapData(data))
+        .withFailureHandler((error) => this.handleLoadError(error, 'dashboard'))
+        .getAdminDashboardBootstrap();
     }
 
-    handleDashboardData(data) {
+    handleBootstrapData(data) {
+      this.expenditures = Array.isArray(data.expenditures) ? data.expenditures : [];
+      this.filterOptions = data.filterOptions || this.buildFilterOptions(this.expenditures);
       this.criteria = this.normalizeCriteria(data.criteria || this.criteria);
-      this.filterOptions = data.filterOptions || { groups: [], types: [] };
       this.renderFilterOptions();
       this.applyCriteriaToForm();
-      this.renderExpenditures(data.expenditures || []);
-      this.renderInquiries(data.inquiries || []);
+      this.renderExpenditures(this.getFilteredExpenditures());
+      this.renderInquiryIdleState();
+    }
+
+    ensureInquiriesLoaded(forceReload) {
+      const shouldReload = Boolean(forceReload);
+      if (this.isLoadingInquiries) {
+        return;
+      }
+
+      if (this.inquiriesLoaded && !shouldReload) {
+        if (this.activeTab === 'inquiry') {
+          this.renderInquiries(this.inquiries);
+        }
+        return;
+      }
+
+      this.isLoadingInquiries = true;
+      this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">読み込み中...</td></tr>';
+
+      google.script.run
+        .withSuccessHandler((data) => {
+          this.isLoadingInquiries = false;
+          this.inquiriesLoaded = true;
+          this.inquiries = Array.isArray(data.inquiries) ? data.inquiries : [];
+          if (this.activeTab === 'inquiry') {
+            this.renderInquiries(this.inquiries);
+          }
+        })
+        .withFailureHandler((error) => {
+          this.isLoadingInquiries = false;
+          this.handleLoadError(error, 'inquiry');
+        })
+        .getInquiryDashboardData();
+    }
+
+    reloadAllLoadedData() {
+      this.loadBootstrap();
+      if (this.inquiriesLoaded || this.activeTab === 'inquiry') {
+        this.ensureInquiriesLoaded(true);
+      }
+    }
+
+    setActiveTab(tabName) {
+      this.activeTab = tabName;
+      if (tabName === 'inquiry') {
+        this.ensureInquiriesLoaded(false);
+      } else {
+        this.renderExpenditures(this.getFilteredExpenditures());
+      }
+    }
+
+    handleLoadError(error, scope) {
+      const message = `読み込みエラー: ${error}`;
+      const escaped = this.escapeHtml(message);
+
+      if (scope === 'inquiry') {
+        this.inqBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">${escaped}</td></tr>`;
+        return;
+      }
+
+      this.expBody.innerHTML = `<tr><td colspan="8" style="text-align:center;">${escaped}</td></tr>`;
+      this.inqBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">${escaped}</td></tr>`;
     }
 
     renderLoadingState() {
       this.expBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">読み込み中...</td></tr>';
-      this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">読み込み中...</td></tr>';
+      this.renderInquiryIdleState();
+    }
+
+    renderInquiryIdleState() {
+      if (this.inquiriesLoaded || this.isLoadingInquiries) {
+        return;
+      }
+
+      this.inqBody.innerHTML =
+        '<tr><td colspan="7" style="text-align:center;">お問い合わせタブを開くと読み込みます。</td></tr>';
     }
 
     renderFilterOptions() {
@@ -85,7 +159,6 @@
 
     renderCheckboxGroup(containerId, name, options, selectedValues) {
       const container = document.getElementById(containerId);
-      container.innerHTML = '';
 
       if (!Array.isArray(options) || options.length === 0) {
         container.innerHTML = '<div class="empty-note">候補がありません</div>';
@@ -93,23 +166,35 @@
       }
 
       const selected = new Set(selectedValues || []);
-      options.forEach((optionValue, index) => {
-        const label = document.createElement('label');
-        label.className = 'checkbox-item';
+      container.innerHTML = options
+        .map((optionValue, index) => {
+          const checked = selected.has(optionValue) ? 'checked' : '';
+          return `
+            <label class="checkbox-item">
+              <input
+                type="checkbox"
+                name="${this.escapeAttribute(name)}"
+                value="${this.escapeAttribute(optionValue)}"
+                id="${this.escapeAttribute(name)}-${index}"
+                ${checked}
+              >
+              <span>${this.escapeHtml(optionValue)}</span>
+            </label>
+          `;
+        })
+        .join('');
+    }
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.name = name;
-        checkbox.value = optionValue;
-        checkbox.id = `${name}-${index}`;
-        checkbox.checked = selected.has(optionValue);
+    buildFilterOptions(records) {
+      return {
+        groups: this.uniqueSorted(records.map((record) => record.group)),
+        types: this.uniqueSorted(records.map((record) => record.type))
+      };
+    }
 
-        const text = document.createElement('span');
-        text.textContent = optionValue;
-
-        label.appendChild(checkbox);
-        label.appendChild(text);
-        container.appendChild(label);
+    uniqueSorted(values) {
+      return [...new Set((values || []).filter(Boolean))].sort((left, right) => {
+        return this.compareText(left, right);
       });
     }
 
@@ -176,11 +261,13 @@
     normalizeCriteria(criteria) {
       return {
         idQuery: String(criteria.idQuery || '').trim(),
-        dateFrom: criteria.dateFrom || '',
-        dateTo: criteria.dateTo || '',
+        dateFrom: this.normalizeDateKey(criteria.dateFrom),
+        dateTo: this.normalizeDateKey(criteria.dateTo),
         groups: Array.isArray(criteria.groups) ? criteria.groups.filter(Boolean) : [],
         types: Array.isArray(criteria.types) ? criteria.types.filter(Boolean) : [],
-        amountMode: criteria.amountMode || 'none',
+        amountMode: ['none', 'exact', 'min', 'max', 'range'].includes(criteria.amountMode)
+          ? criteria.amountMode
+          : 'none',
         amountValue: this.parseNumber(criteria.amountValue),
         amountMin: this.parseNumber(criteria.amountMin),
         amountMax: this.parseNumber(criteria.amountMax),
@@ -188,6 +275,28 @@
         sortBy: criteria.sortBy === 'id' ? 'id' : 'date',
         sortOrder: criteria.sortOrder === 'asc' ? 'asc' : 'desc'
       };
+    }
+
+    normalizeDateKey(value) {
+      if (!value) {
+        return '';
+      }
+
+      const text = String(value).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return text;
+      }
+
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) {
+        return '';
+      }
+
+      return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+      ].join('-');
     }
 
     parseNumber(value) {
@@ -198,101 +307,260 @@
       return Number.isFinite(parsed) ? parsed : null;
     }
 
+    applyFiltersFromForm() {
+      this.criteria = this.collectCriteriaFromForm();
+      this.renderExpenditures(this.getFilteredExpenditures());
+    }
+
     resetFilters() {
       this.criteria = this.createDefaultCriteria();
       this.applyCriteriaToForm();
-      this.loadData(this.criteria);
+      this.renderExpenditures(this.getFilteredExpenditures());
+    }
+
+    getFilteredExpenditures() {
+      const criteria = this.criteria;
+      return [...this.expenditures]
+        .filter((record) => this.matchesRecord(record, criteria))
+        .sort((left, right) => this.compareRecords(left, right, criteria));
+    }
+
+    matchesRecord(record, criteria) {
+      const recordDateKey = this.normalizeDateKey(record.date);
+
+      if (criteria.idQuery) {
+        const normalizedId = this.normalizeText(record.id);
+        if (!normalizedId.includes(this.normalizeText(criteria.idQuery))) {
+          return false;
+        }
+      }
+
+      if (criteria.dateFrom && recordDateKey && recordDateKey < criteria.dateFrom) {
+        return false;
+      }
+
+      if (criteria.dateTo && recordDateKey && recordDateKey > criteria.dateTo) {
+        return false;
+      }
+
+      if (criteria.groups.length > 0 && !criteria.groups.includes(record.group)) {
+        return false;
+      }
+
+      if (criteria.types.length > 0 && !criteria.types.includes(record.type)) {
+        return false;
+      }
+
+      if (!this.matchesAmount(Number(record.amount) || 0, criteria)) {
+        return false;
+      }
+
+      if (criteria.contentQuery) {
+        const normalizedContent = this.normalizeText(record.content);
+        if (!normalizedContent.includes(this.normalizeText(criteria.contentQuery))) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    matchesAmount(amount, criteria) {
+      switch (criteria.amountMode) {
+        case 'exact':
+          return criteria.amountValue === null ? true : amount === criteria.amountValue;
+        case 'min':
+          return criteria.amountValue === null ? true : amount >= criteria.amountValue;
+        case 'max':
+          return criteria.amountValue === null ? true : amount <= criteria.amountValue;
+        case 'range':
+          if (criteria.amountMin !== null && amount < criteria.amountMin) {
+            return false;
+          }
+          if (criteria.amountMax !== null && amount > criteria.amountMax) {
+            return false;
+          }
+          return true;
+        case 'none':
+        default:
+          return true;
+      }
+    }
+
+    compareRecords(left, right, criteria) {
+      const orderFactor = criteria.sortOrder === 'asc' ? 1 : -1;
+      const primary =
+        criteria.sortBy === 'id'
+          ? this.compareText(left.id, right.id)
+          : this.toTimestamp(left.date) - this.toTimestamp(right.date);
+
+      if (primary !== 0) {
+        return primary * orderFactor;
+      }
+
+      const secondary =
+        criteria.sortBy === 'id'
+          ? this.toTimestamp(left.date) - this.toTimestamp(right.date)
+          : this.compareText(left.id, right.id);
+
+      return secondary * orderFactor;
+    }
+
+    toTimestamp(value) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+    }
+
+    normalizeText(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase();
+    }
+
+    compareText(left, right) {
+      return String(left || '').localeCompare(String(right || ''), 'ja', {
+        numeric: true,
+        sensitivity: 'base'
+      });
     }
 
     renderExpenditures(records) {
-      this.expBody.innerHTML = '';
       if (!Array.isArray(records) || records.length === 0) {
         this.expBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">データなし</td></tr>';
         return;
       }
 
-      records.forEach((record) => {
-        const row = document.createElement('tr');
-        const fileLink =
-          record.file && record.file !== 'なし'
-            ? `<a href="${this.escapeAttribute(record.file)}" target="_blank" class="link-btn">確認</a>`
-            : '-';
-        const statusOptions = ['申請中', '承認済', '未精算', '精算完了', '却下']
-          .map((option) => {
-            const selected = record.status === option ? 'selected' : '';
-            return `<option value="${this.escapeAttribute(option)}" ${selected}>${this.escapeHtml(option)}</option>`;
-          })
-          .join('');
+      this.expBody.innerHTML = records
+        .map((record) => {
+          const fileLink =
+            record.file && record.file !== 'なし'
+              ? `<a href="${this.escapeAttribute(record.file)}" target="_blank" class="link-btn">確認</a>`
+              : '-';
 
-        row.innerHTML = `
-          <td>${this.escapeHtml(record.id)}</td>
-          <td>${this.escapeHtml(record.date)}</td>
-          <td><strong>${this.escapeHtml(record.group)}</strong></td>
-          <td>${this.escapeHtml(record.type)}</td>
-          <td>¥${Number(record.amount).toLocaleString()}</td>
-          <td style="max-width:220px; font-size:0.82em;">${this.escapeHtml(record.content)}</td>
-          <td>${fileLink}</td>
-          <td>
-            <select class="status-select" data-type="expenditure" data-row-index="${record.rowIndex}">
-              ${statusOptions}
-            </select>
-          </td>
-        `;
-        this.expBody.appendChild(row);
-      });
-
-      this.attachStatusHandlers(this.expBody);
+          return `
+            <tr>
+              <td>${this.escapeHtml(record.id)}</td>
+              <td>${this.escapeHtml(record.date)}</td>
+              <td><strong>${this.escapeHtml(record.group)}</strong></td>
+              <td>${this.escapeHtml(record.type)}</td>
+              <td>¥${Number(record.amount).toLocaleString()}</td>
+              <td style="max-width:220px; font-size:0.82em;">${this.escapeHtml(record.content)}</td>
+              <td>${fileLink}</td>
+              <td>
+                <select
+                  class="status-select"
+                  data-type="expenditure"
+                  data-row-index="${this.escapeAttribute(record.rowIndex)}"
+                  data-status="${this.escapeAttribute(record.status)}"
+                >
+                  ${this.buildStatusOptions(
+                    ['申請中', '承認済', '未精算', '精算完了', '却下'],
+                    record.status
+                  )}
+                </select>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
     }
 
     renderInquiries(records) {
-      this.inqBody.innerHTML = '';
       if (!Array.isArray(records) || records.length === 0) {
         this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">データなし</td></tr>';
         return;
       }
 
-      records.forEach((record) => {
-        const row = document.createElement('tr');
-        const statusOptions = ['未対応', '対応中', '完了']
-          .map((option) => {
-            const selected = record.status === option ? 'selected' : '';
-            return `<option value="${this.escapeAttribute(option)}" ${selected}>${this.escapeHtml(option)}</option>`;
-          })
-          .join('');
-
-        row.innerHTML = `
-          <td>${this.escapeHtml(record.id)}</td>
-          <td>${this.escapeHtml(record.date)}</td>
-          <td>${this.escapeHtml(record.group)}</td>
-          <td style="font-size:0.82em;">${this.escapeHtml(record.sender)}</td>
-          <td>${this.escapeHtml(record.subject)}</td>
-          <td style="max-width:300px; font-size:0.82em;">${this.escapeHtml(record.message)}</td>
-          <td>
-            <select class="status-select" data-type="inquiry" data-row-index="${record.rowIndex}">
-              ${statusOptions}
-            </select>
-          </td>
-        `;
-        this.inqBody.appendChild(row);
-      });
-
-      this.attachStatusHandlers(this.inqBody);
+      this.inqBody.innerHTML = records
+        .map((record) => {
+          return `
+            <tr>
+              <td>${this.escapeHtml(record.id)}</td>
+              <td>${this.escapeHtml(record.date)}</td>
+              <td>${this.escapeHtml(record.group)}</td>
+              <td style="font-size:0.82em;">${this.escapeHtml(record.sender)}</td>
+              <td>${this.escapeHtml(record.subject)}</td>
+              <td style="max-width:300px; font-size:0.82em;">${this.escapeHtml(record.message)}</td>
+              <td>
+                <select
+                  class="status-select"
+                  data-type="inquiry"
+                  data-row-index="${this.escapeAttribute(record.rowIndex)}"
+                  data-status="${this.escapeAttribute(record.status)}"
+                >
+                  ${this.buildStatusOptions(['未対応', '対応中', '完了'], record.status)}
+                </select>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
     }
 
-    attachStatusHandlers(container) {
-      container.querySelectorAll('.status-select').forEach((select) => {
-        select.addEventListener('change', (event) => {
-          const target = event.currentTarget;
-          this.updateStatus(target.dataset.type, Number(target.dataset.rowIndex), target.value);
-        });
-      });
+    buildStatusOptions(options, currentValue) {
+      return options
+        .map((option) => {
+          const selected = currentValue === option ? 'selected' : '';
+          return `<option value="${this.escapeAttribute(option)}" ${selected}>${this.escapeHtml(option)}</option>`;
+        })
+        .join('');
     }
 
-    updateStatus(type, rowIndex, newStatus) {
+    handleStatusSelectChange(event) {
+      const select = event.target.closest('.status-select');
+      if (!select) {
+        return;
+      }
+
+      this.updateStatus(select);
+    }
+
+    updateStatus(select) {
+      const type = select.dataset.type;
+      const rowIndex = Number(select.dataset.rowIndex);
+      const newStatus = select.value;
+      const previousStatus = select.dataset.status || '';
+
+      if (!type || !rowIndex || newStatus === previousStatus) {
+        select.value = previousStatus;
+        return;
+      }
+
+      select.disabled = true;
+
       google.script.run
-        .withSuccessHandler(() => this.loadData(this.criteria))
-        .withFailureHandler((error) => alert(`更新エラー: ${error}`))
+        .withSuccessHandler((result) => {
+          select.disabled = false;
+          if (!result || result.success === false) {
+            select.value = previousStatus;
+            alert(result && result.message ? result.message : '更新に失敗しました。');
+            return;
+          }
+
+          this.applyLocalStatusUpdate(type, rowIndex, newStatus);
+        })
+        .withFailureHandler((error) => {
+          select.disabled = false;
+          select.value = previousStatus;
+          alert(`更新エラー: ${error}`);
+        })
         .updateStatus(type, rowIndex, newStatus);
+    }
+
+    applyLocalStatusUpdate(type, rowIndex, newStatus) {
+      const targetRecords = type === 'inquiry' ? this.inquiries : this.expenditures;
+      const targetRecord = targetRecords.find((record) => Number(record.rowIndex) === rowIndex);
+
+      if (targetRecord) {
+        targetRecord.status = newStatus;
+      }
+
+      if (type === 'inquiry') {
+        this.renderInquiries(this.inquiries);
+        return;
+      }
+
+      this.renderExpenditures(this.getFilteredExpenditures());
     }
 
     escapeHtml(value) {
@@ -322,10 +590,12 @@
     if (button) {
       button.classList.add('active');
     }
+
+    adminDashboardApp.setActiveTab(tabName);
   }
 
   function reloadCurrentFilters() {
-    adminDashboardApp.loadData(adminDashboardApp.criteria);
+    adminDashboardApp.reloadAllLoadedData();
   }
 
   window.addEventListener('DOMContentLoaded', () => {

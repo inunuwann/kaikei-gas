@@ -5,6 +5,10 @@ import {
   type InquiryRecord,
 } from './accounting-domain.ts';
 import { AdminDashboardService, type AdminSearchCriteriaInput } from './admin-dashboard-service.ts';
+import {
+  AccountingSpreadsheetRepository,
+  type UserMasterRecord,
+} from './accounting-spreadsheet-repository.ts';
 import { ExpenditureRequestPolicy } from './expenditure-policy.ts';
 import { UserFormViewModelFactory } from './user-form-view-model.ts';
 
@@ -67,18 +71,18 @@ function doGet(e: GoogleAppsScript.Events.DoGet) {
   const email = Session.getActiveUser().getEmail();
   const roleParam = e?.parameter?.role ?? '';
   const scriptUrl = ScriptApp.getService().getUrl();
-
-  const adminUser = isAdmin(email);
-  const userInfo = getUserStatus(email);
-  const normalUser = userInfo !== null;
+  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+  const adminUser = repository.isAdmin(email);
+  const userRecord = repository.findUserByEmail(email);
+  const normalUser = userRecord !== null;
 
   if (adminUser && normalUser) {
     if (roleParam === 'admin') {
       return renderAdmin(email);
     }
 
-    if (roleParam === 'user' && userInfo) {
-      return renderUser(userInfo);
+    if (roleParam === 'user' && userRecord) {
+      return renderUser(buildUserStatusViewData(repository, userRecord));
     }
 
     const template = HtmlService.createTemplateFromFile('select_role');
@@ -94,17 +98,13 @@ function doGet(e: GoogleAppsScript.Events.DoGet) {
     return renderAdmin(email);
   }
 
-  if (userInfo) {
-    return renderUser(userInfo);
+  if (userRecord) {
+    return renderUser(buildUserStatusViewData(repository, userRecord));
   }
 
   return HtmlService.createHtmlOutput(
     '<h2>エラー：アクセス権限がありません</h2><p>担当者マスタまたは管理者マスタに登録されていません。</p>',
   );
-}
-
-function isAdmin(email: string): boolean {
-  return getAdminEmails().includes(email);
 }
 
 function renderAdmin(email: string) {
@@ -127,44 +127,42 @@ function renderUser(userInfo: UserStatusViewData) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function getAdminDashboardData(criteriaInput: AdminSearchCriteriaInput = {}) {
-  const ss = SpreadsheetApp.openById(SS_ID);
-  const expenditures = loadExpenditureRecords(ss);
-  const inquiries = loadInquiryRecords(ss);
+function getAdminDashboardBootstrap() {
+  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+  const expenditures = repository.getExpenditureRecords();
 
   return {
-    expenditures: adminDashboardService
-      .filterAndSort(expenditures, criteriaInput)
-      .map((record) => ({
-        rowIndex: record.rowIndex,
-        id: record.id,
-        date: formatJstDate(record.date),
-        group: record.groupName,
-        type: record.type,
-        status: record.status,
-        amount: record.amount,
-        content: record.content,
-        file: record.file,
-      })),
-    inquiries: [...inquiries]
-      .sort((left, right) => right.date.getTime() - left.date.getTime())
-      .map((record) => ({
-        rowIndex: record.rowIndex,
-        id: record.id,
-        date: formatJstDate(record.date),
-        group: record.group,
-        sender: record.sender,
-        subject: record.subject,
-        message: record.message,
-        status: record.status,
-      })),
+    expenditures: mapExpenditureViewRecords(expenditures),
+    filterOptions: adminDashboardService.getFilterOptions(expenditures),
+    criteria: adminDashboardService.normalizeCriteria(),
+  };
+}
+
+function getInquiryDashboardData() {
+  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+
+  return {
+    inquiries: mapInquiryViewRecords(repository.getInquiryRecords()),
+  };
+}
+
+function getAdminDashboardData(criteriaInput: AdminSearchCriteriaInput = {}) {
+  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+  const expenditures = repository.getExpenditureRecords();
+
+  return {
+    expenditures: mapExpenditureViewRecords(
+      adminDashboardService.filterAndSort(expenditures, criteriaInput),
+    ),
+    inquiries: mapInquiryViewRecords(repository.getInquiryRecords()),
     filterOptions: adminDashboardService.getFilterOptions(expenditures),
     criteria: adminDashboardService.normalizeCriteria(criteriaInput),
   };
 }
 
 function updateStatus(type: string, rowIndex: number, newStatus: string) {
-  const ss = SpreadsheetApp.openById(SS_ID);
+  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+  const ss = repository.getSpreadsheet();
   let sheet: GoogleAppsScript.Spreadsheet.Sheet | null = null;
   let columnIndex = 0;
 
@@ -184,35 +182,38 @@ function updateStatus(type: string, rowIndex: number, newStatus: string) {
   return { success: true };
 }
 
-function getUserStatus(email: string): UserStatusViewData | null {
-  const ss = SpreadsheetApp.openById(SS_ID);
-  const usersSheet = ss.getSheetByName('M_Users');
-  if (!usersSheet) {
+function getUserStatus(
+  email: string,
+  repository: AccountingSpreadsheetRepository = AccountingSpreadsheetRepository.openById(SS_ID),
+): UserStatusViewData | null {
+  const userRecord = repository.findUserByEmail(email);
+  if (!userRecord) {
     return null;
   }
 
-  const usersData = usersSheet.getDataRange().getValues();
-  const userRow = usersData.slice(1).find((row) => row[0] === email);
-  if (!userRow) {
-    return null;
-  }
+  return buildUserStatusViewData(repository, userRecord);
+}
 
-  const groupId = String(userRow[1]);
-  const budgetTotal = Number(userRow[3]) || 0;
-  const groupRecords = loadExpenditureRecords(ss).filter((record) => record.groupId === groupId);
+function buildUserStatusViewData(
+  repository: AccountingSpreadsheetRepository,
+  userRecord: UserMasterRecord,
+): UserStatusViewData {
+  const groupRecords = repository
+    .getExpenditureRecords()
+    .filter((record) => record.groupId === userRecord.groupId);
   const summary = ExpenditureRequestPolicy.summarizeGroupRecords(
     groupRecords,
-    budgetTotal,
+    userRecord.budgetTotal,
     formatJstDate,
   );
 
   return {
-    email: String(userRow[0]),
-    groupId,
-    groupName: String(userRow[2]),
-    budgetTotal,
+    email: userRecord.email,
+    groupId: userRecord.groupId,
+    groupName: userRecord.groupName,
+    budgetTotal: userRecord.budgetTotal,
     remainingBudget: summary.remainingBudget,
-    allowedItems: loadAllowedItems(ss, groupId),
+    allowedItems: repository.getAllowedItems(userRecord.groupId),
     history: summary.history,
     unsettledItem: summary.unsettledItem,
     requestAvailability: summary.requestAvailability,
@@ -223,19 +224,10 @@ function getUserStatus(email: string): UserStatusViewData | null {
   };
 }
 
-function getAdminEmails(): string[] {
-  const ss = SpreadsheetApp.openById(SS_ID);
-  const sheet = ss.getSheetByName('M_Admin');
-  if (!sheet) {
-    return [];
-  }
-
-  return sheet
-    .getDataRange()
-    .getValues()
-    .slice(1)
-    .map((row) => String(row[1] ?? '').trim())
-    .filter((email) => email.includes('@'));
+function getAdminEmails(
+  repository: AccountingSpreadsheetRepository = AccountingSpreadsheetRepository.openById(SS_ID),
+): string[] {
+  return repository.getAdminEmails();
 }
 
 function processForm(formObj: FormSubmissionInput) {
@@ -245,7 +237,8 @@ function processForm(formObj: FormSubmissionInput) {
     lock.waitLock(30000);
 
     const userEmail = Session.getActiveUser().getEmail();
-    const userInfo = getUserStatus(userEmail);
+    const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+    const userInfo = getUserStatus(userEmail, repository);
     if (!userInfo) {
       throw new Error('利用者情報が見つかりません。');
     }
@@ -261,15 +254,15 @@ function processForm(formObj: FormSubmissionInput) {
       throw new Error('少なくとも1つの品目を入力してください。');
     }
 
-    const ss = SpreadsheetApp.openById(SS_ID);
+    const ss = repository.getSpreadsheet();
     const expenditureSheet = ss.getSheetByName('T_Expenditure');
     if (!expenditureSheet) {
       throw new Error('T_Expenditure シートが見つかりません。');
     }
 
-    const groupRecords = loadExpenditureRecords(ss).filter(
-      (record) => record.groupId === userInfo.groupId,
-    );
+    const groupRecords = repository
+      .getExpenditureRecords()
+      .filter((record) => record.groupId === userInfo.groupId);
 
     if (requestType === '精算') {
       ExpenditureRequestPolicy.assertCanStartSettlement(groupRecords);
@@ -313,7 +306,7 @@ function processForm(formObj: FormSubmissionInput) {
 
     GmailApp.sendEmail(userInfo.email, `【申請完了】${newId}`, mailBody);
 
-    const adminEmails = getAdminEmails();
+    const adminEmails = getAdminEmails(repository);
     if (adminEmails.length > 0) {
       GmailApp.sendEmail(
         adminEmails.join(','),
@@ -341,7 +334,8 @@ function processInquiry(formObj: InquiryFormInput) {
 
   try {
     const email = Session.getActiveUser().getEmail();
-    const userInfo = getUserStatus(email);
+    const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+    const userInfo = getUserStatus(email, repository);
     if (!userInfo) {
       throw new Error('利用者情報が見つかりません。');
     }
@@ -352,7 +346,7 @@ function processInquiry(formObj: InquiryFormInput) {
       throw new Error('件名と本文を入力してください。');
     }
 
-    const ss = SpreadsheetApp.openById(SS_ID);
+    const ss = repository.getSpreadsheet();
     const inquirySheet = ss.getSheetByName('T_Inquiry');
     if (!inquirySheet) {
       throw new Error('T_Inquiry シートが見つかりません。');
@@ -371,7 +365,7 @@ function processInquiry(formObj: InquiryFormInput) {
       message,
     ].join('\n');
 
-    const adminEmails = getAdminEmails();
+    const adminEmails = getAdminEmails(repository);
     if (adminEmails.length > 0) {
       GmailApp.sendEmail(adminEmails.join(','), `【問い合わせ】${userInfo.groupName}`, bodyContent);
     }
@@ -397,123 +391,14 @@ function include(filename: string) {
 // bundle 後も公開関数が残るように明示的に紐付ける。
 Object.assign(globalThis, {
   doGet,
+  getAdminDashboardBootstrap,
   getAdminDashboardData,
+  getInquiryDashboardData,
   updateStatus,
   processForm,
   processInquiry,
   include,
 });
-
-function loadExpenditureRecords(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): ExpenditureRecord[] {
-  const sheet = ss.getSheetByName('T_Expenditure');
-  if (!sheet) {
-    return [];
-  }
-
-  const groupNameMap = buildGroupNameMap(ss);
-
-  return sheet
-    .getDataRange()
-    .getValues()
-    .slice(1)
-    .filter((row) => row[0])
-    .map((row, index) => mapExpenditureRow(row, index + 2, groupNameMap));
-}
-
-function loadInquiryRecords(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): InquiryRecord[] {
-  const sheet = ss.getSheetByName('T_Inquiry');
-  if (!sheet) {
-    return [];
-  }
-
-  return sheet
-    .getDataRange()
-    .getValues()
-    .slice(1)
-    .filter((row) => row[0])
-    .map((row, index) => {
-      const date = asDate(row[1]);
-      return {
-        rowIndex: index + 2,
-        id: String(row[0]),
-        date,
-        dateKey: formatJstDateKey(date),
-        group: String(row[2] ?? ''),
-        sender: String(row[3] ?? ''),
-        subject: String(row[4] ?? ''),
-        message: String(row[5] ?? ''),
-        status: String(row[6] ?? ''),
-      };
-    });
-}
-
-function loadAllowedItems(
-  ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
-  groupId: string,
-): AllowedItem[] {
-  const sheet = ss.getSheetByName('M_ItemMaster');
-  if (!sheet) {
-    return [];
-  }
-
-  return sheet
-    .getDataRange()
-    .getValues()
-    .slice(1)
-    .filter((row) => String(row[0]) === groupId)
-    .map((row) => ({
-      name: String(row[1] ?? ''),
-      defaultPrice: row[2] ?? null,
-    }))
-    .filter((item) => item.name);
-}
-
-function buildGroupNameMap(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): Map<string, string> {
-  const usersSheet = ss.getSheetByName('M_Users');
-  const groupMap = new Map<string, string>();
-
-  if (!usersSheet) {
-    return groupMap;
-  }
-
-  usersSheet
-    .getDataRange()
-    .getValues()
-    .slice(1)
-    .forEach((row) => {
-      const groupId = String(row[1] ?? '').trim();
-      const groupName = String(row[2] ?? '').trim();
-      if (groupId && groupName) {
-        groupMap.set(groupId, groupName);
-      }
-    });
-
-  return groupMap;
-}
-
-function mapExpenditureRow(
-  row: unknown[],
-  rowIndex: number,
-  groupNameMap: Map<string, string>,
-): ExpenditureRecord {
-  const date = asDate(row[1]);
-  const groupId = String(row[2] ?? '');
-
-  return {
-    rowIndex,
-    id: String(row[0]),
-    date,
-    dateKey: formatJstDateKey(date),
-    groupId,
-    groupName: groupNameMap.get(groupId) ?? groupId,
-    type: String(row[3] ?? ''),
-    status: String(row[4] ?? ''),
-    amount: Number(row[5]) || 0,
-    content: String(row[6] ?? ''),
-    file: String(row[7] ?? 'なし'),
-    settlementFlag: String(row[8] ?? ''),
-  };
-}
 
 function parseSubmittedItems(itemsJson: string | undefined) {
   const parsed = JSON.parse(itemsJson ?? '[]');
@@ -543,16 +428,37 @@ function saveAttachmentFile(requestId: string, formObj: FormSubmissionInput): st
   return DriveApp.getRootFolder().createFile(blob).setName(`${requestId}_${fileName}`).getUrl();
 }
 
-function asDate(value: unknown): Date {
-  return value instanceof Date ? value : new Date(String(value));
-}
-
 function formatJstDate(date: Date): string {
   return Utilities.formatDate(date, SCRIPT_TIME_ZONE, 'yyyy/MM/dd');
 }
 
-function formatJstDateKey(date: Date): string {
-  return Utilities.formatDate(date, SCRIPT_TIME_ZONE, 'yyyy-MM-dd');
+function mapExpenditureViewRecords(records: ExpenditureRecord[]) {
+  return records.map((record) => ({
+    rowIndex: record.rowIndex,
+    id: record.id,
+    date: formatJstDate(record.date),
+    group: record.groupName,
+    type: record.type,
+    status: record.status,
+    amount: record.amount,
+    content: record.content,
+    file: record.file,
+  }));
+}
+
+function mapInquiryViewRecords(records: InquiryRecord[]) {
+  return [...records]
+    .sort((left, right) => right.date.getTime() - left.date.getTime())
+    .map((record) => ({
+      rowIndex: record.rowIndex,
+      id: record.id,
+      date: formatJstDate(record.date),
+      group: record.group,
+      sender: record.sender,
+      subject: record.subject,
+      message: record.message,
+      status: record.status,
+    }));
 }
 
 function getErrorMessage(error: unknown): string {
