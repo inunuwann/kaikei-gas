@@ -21,12 +21,13 @@ sources = ["package.json", "package-lock.json"]
 outputs = ["node_modules"]
 
 [tasks.build]
-description = "Bundle GAS server code and copy HTML assets into dist/"
-run = "node build.js && cp src/*.html dist/"
+description = "Bundle GAS server code and copy HTML/manifest assets into dist/"
+run = "node build.js"
 sources = [
   "build.js",
   "src/**/*.ts",
   "src/**/*.html",
+  "src/**/*.json",
   "tsconfig.json",
   "package.json",
   "package-lock.json",
