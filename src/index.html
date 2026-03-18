@@ -169,6 +169,7 @@
       var UNSETTLED_DATA = <?!= JSON.stringify(data.unsettledItem) ?>;
       var USER_FORM_BOOTSTRAP = <?!= JSON.stringify(data.formBootstrap) ?>;
     </script>
+    <?!= include('client_debug'); ?>
     <?!= include('javascript'); ?>
     <div style="text-align:center; margin-top:30px; font-size:0.8em;">
       <a href="<?= ScriptApp.getService().getUrl() ?>?role=admin" style="color:#999;">管理者モードへ切替</a>

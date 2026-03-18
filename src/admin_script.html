@@ -1,6 +1,7 @@
 <script>
   class AdminDashboardApp {
     constructor() {
+      this.logger = window.createDebugLogger('AdminDashboardApp');
       this.criteria = this.createDefaultCriteria();
       this.filterOptions = { groups: [], types: [] };
       this.expenditures = [];
@@ -10,9 +11,13 @@
       this.isLoadingInquiries = false;
       this.expBody = document.getElementById('expBody');
       this.inqBody = document.getElementById('inqBody');
+      this.logger.log('constructed', {
+        hasBootstrapData: this.hasBootstrapData()
+      });
     }
 
     init() {
+      const timer = this.logger.startTimer('init');
       document
         .getElementById('searchBtn')
         .addEventListener('click', () => this.applyFiltersFromForm());
@@ -28,12 +33,19 @@
       this.applyCriteriaToForm();
       this.updateAmountFilterInputs();
       if (this.hasBootstrapData()) {
+        this.logger.log('using-embedded-bootstrap');
         this.handleBootstrapData(ADMIN_DASHBOARD_BOOTSTRAP);
+        timer.end({
+          bootstrapSource: 'template'
+        });
         return;
       }
 
       this.renderLoadingState();
       this.loadBootstrap();
+      timer.end({
+        bootstrapSource: 'rpc'
+      });
     }
 
     createDefaultCriteria() {
@@ -54,11 +66,20 @@
     }
 
     loadBootstrap() {
+      const timer = this.logger.startTimer('loadBootstrap');
       this.renderLoadingState();
 
       google.script.run
-        .withSuccessHandler((data) => this.handleBootstrapData(data))
-        .withFailureHandler((error) => this.handleLoadError(error, 'dashboard'))
+        .withSuccessHandler((data) => {
+          timer.end({
+            expenditureCount: Array.isArray(data && data.expenditures) ? data.expenditures.length : 0
+          });
+          this.handleBootstrapData(data);
+        })
+        .withFailureHandler((error) => {
+          timer.fail(error);
+          this.handleLoadError(error, 'dashboard');
+        })
         .getAdminDashboardBootstrap();
     }
 
@@ -74,6 +95,11 @@
       this.expenditures = Array.isArray(data.expenditures) ? data.expenditures : [];
       this.filterOptions = data.filterOptions || this.buildFilterOptions(this.expenditures);
       this.criteria = this.normalizeCriteria(data.criteria || this.criteria);
+      this.logger.log('handleBootstrapData', {
+        expenditureCount: this.expenditures.length,
+        groupFilterCount: this.filterOptions.groups.length,
+        typeFilterCount: this.filterOptions.types.length
+      });
       this.renderFilterOptions();
       this.applyCriteriaToForm();
       this.renderExpenditures(this.getFilteredExpenditures());
@@ -81,8 +107,14 @@
     }
 
     ensureInquiriesLoaded(forceReload) {
+      const timer = this.logger.startTimer('ensureInquiriesLoaded', {
+        forceReload: Boolean(forceReload)
+      });
       const shouldReload = Boolean(forceReload);
       if (this.isLoadingInquiries) {
+        timer.end({
+          skipped: 'already-loading'
+        });
         return;
       }
 
@@ -90,6 +122,10 @@
         if (this.activeTab === 'inquiry') {
           this.renderInquiries(this.inquiries);
         }
+        timer.end({
+          skipped: 'already-loaded',
+          inquiryCount: this.inquiries.length
+        });
         return;
       }
 
@@ -101,18 +137,26 @@
           this.isLoadingInquiries = false;
           this.inquiriesLoaded = true;
           this.inquiries = Array.isArray(data.inquiries) ? data.inquiries : [];
+          timer.end({
+            inquiryCount: this.inquiries.length
+          });
           if (this.activeTab === 'inquiry') {
             this.renderInquiries(this.inquiries);
           }
         })
         .withFailureHandler((error) => {
           this.isLoadingInquiries = false;
+          timer.fail(error);
           this.handleLoadError(error, 'inquiry');
         })
         .getInquiryDashboardData();
     }
 
     reloadAllLoadedData() {
+      this.logger.log('reloadAllLoadedData', {
+        activeTab: this.activeTab,
+        inquiriesLoaded: this.inquiriesLoaded
+      });
       this.loadBootstrap();
       if (this.inquiriesLoaded || this.activeTab === 'inquiry') {
         this.ensureInquiriesLoaded(true);
@@ -121,6 +165,9 @@
 
     setActiveTab(tabName) {
       this.activeTab = tabName;
+      this.logger.log('setActiveTab', {
+        tabName
+      });
       if (tabName === 'inquiry') {
         this.ensureInquiriesLoaded(false);
       } else {
@@ -129,6 +176,10 @@
     }
 
     handleLoadError(error, scope) {
+      this.logger.error('handleLoadError', {
+        scope,
+        error
+      });
       const message = `読み込みエラー: ${error}`;
       const escaped = this.escapeHtml(message);
 
@@ -156,6 +207,10 @@
     }
 
     renderFilterOptions() {
+      this.logger.log('renderFilterOptions', {
+        groupFilterCount: this.filterOptions.groups.length,
+        typeFilterCount: this.filterOptions.types.length
+      });
       this.renderCheckboxGroup(
         'groupFilterList',
         'groupFilter',
@@ -322,13 +377,22 @@
 
     applyFiltersFromForm() {
       this.criteria = this.collectCriteriaFromForm();
-      this.renderExpenditures(this.getFilteredExpenditures());
+      const filteredRecords = this.getFilteredExpenditures();
+      this.logger.log('applyFiltersFromForm', {
+        criteria: this.criteria,
+        resultCount: filteredRecords.length
+      });
+      this.renderExpenditures(filteredRecords);
     }
 
     resetFilters() {
       this.criteria = this.createDefaultCriteria();
       this.applyCriteriaToForm();
-      this.renderExpenditures(this.getFilteredExpenditures());
+      const filteredRecords = this.getFilteredExpenditures();
+      this.logger.log('resetFilters', {
+        resultCount: filteredRecords.length
+      });
+      this.renderExpenditures(filteredRecords);
     }
 
     getFilteredExpenditures() {
@@ -438,6 +502,9 @@
     }
 
     renderExpenditures(records) {
+      this.logger.log('renderExpenditures', {
+        count: Array.isArray(records) ? records.length : 0
+      });
       if (!Array.isArray(records) || records.length === 0) {
         this.expBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">データなし</td></tr>';
         return;
@@ -479,6 +546,9 @@
     }
 
     renderInquiries(records) {
+      this.logger.log('renderInquiries', {
+        count: Array.isArray(records) ? records.length : 0
+      });
       if (!Array.isArray(records) || records.length === 0) {
         this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">データなし</td></tr>';
         return;
@@ -525,10 +595,16 @@
         return;
       }
 
+      this.logger.log('handleStatusSelectChange', {
+        type: select.dataset.type,
+        rowIndex: Number(select.dataset.rowIndex),
+        nextStatus: select.value
+      });
       this.updateStatus(select);
     }
 
     updateStatus(select) {
+      const timer = this.logger.startTimer('updateStatus');
       const type = select.dataset.type;
       const rowIndex = Number(select.dataset.rowIndex);
       const newStatus = select.value;
@@ -536,6 +612,11 @@
 
       if (!type || !rowIndex || newStatus === previousStatus) {
         select.value = previousStatus;
+        timer.end({
+          skipped: true,
+          type,
+          rowIndex
+        });
         return;
       }
 
@@ -546,21 +627,41 @@
           select.disabled = false;
           if (!result || result.success === false) {
             select.value = previousStatus;
+            timer.end({
+              success: false,
+              type,
+              rowIndex
+            });
             alert(result && result.message ? result.message : '更新に失敗しました。');
             return;
           }
 
+          timer.end({
+            success: true,
+            type,
+            rowIndex,
+            newStatus
+          });
           this.applyLocalStatusUpdate(type, rowIndex, newStatus);
         })
         .withFailureHandler((error) => {
           select.disabled = false;
           select.value = previousStatus;
+          timer.fail(error, {
+            type,
+            rowIndex
+          });
           alert(`更新エラー: ${error}`);
         })
         .updateStatus(type, rowIndex, newStatus);
     }
 
     applyLocalStatusUpdate(type, rowIndex, newStatus) {
+      this.logger.log('applyLocalStatusUpdate', {
+        type,
+        rowIndex,
+        newStatus
+      });
       const targetRecords = type === 'inquiry' ? this.inquiries : this.expenditures;
       const targetRecord = targetRecords.find((record) => Number(record.rowIndex) === rowIndex);
 

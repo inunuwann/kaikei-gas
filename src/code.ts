@@ -9,6 +9,7 @@ import {
   AccountingSpreadsheetRepository,
   type UserMasterRecord,
 } from './accounting-spreadsheet-repository.ts';
+import { createServerDebugLogger, maskEmail } from './debug-logger.ts';
 import { ExpenditureRequestPolicy } from './expenditure-policy.ts';
 import { UserFormViewModelFactory } from './user-form-view-model.ts';
 
@@ -16,6 +17,7 @@ const SS_ID = '1-3Fj7Y6bRYnU7RyNkfI76YuDmG-kpaXJuelLgzGd6fY';
 const SCRIPT_TIME_ZONE = 'Asia/Tokyo';
 
 const adminDashboardService = new AdminDashboardService();
+const serverLogger = createServerDebugLogger('code');
 
 interface UserStatusViewData {
   email: string;
@@ -70,49 +72,80 @@ interface InquiryFormInput {
 function doGet(e: GoogleAppsScript.Events.DoGet) {
   const email = Session.getActiveUser().getEmail();
   const roleParam = e?.parameter?.role ?? '';
-  const scriptUrl = ScriptApp.getService().getUrl();
-  const repository = AccountingSpreadsheetRepository.openById(SS_ID);
-  const adminUser = repository.isAdmin(email);
-  const userRecord = repository.findUserByEmail(email);
-  const normalUser = userRecord !== null;
+  const logger = serverLogger.child('doGet', {
+    email: maskEmail(email),
+    roleParam,
+  });
+  const timer = logger.startTimer('request');
 
-  if (adminUser && normalUser) {
-    if (roleParam === 'admin') {
+  try {
+    const scriptUrl = ScriptApp.getService().getUrl();
+    const repository = AccountingSpreadsheetRepository.openById(SS_ID);
+    const adminUser = repository.isAdmin(email);
+    const userRecord = repository.findUserByEmail(email);
+    const normalUser = userRecord !== null;
+    logger.log('role-resolved', {
+      adminUser,
+      normalUser,
+    });
+
+    if (adminUser && normalUser) {
+      if (roleParam === 'admin') {
+        timer.end({ target: 'admin' });
+        return renderAdmin(email);
+      }
+
+      if (roleParam === 'user' && userRecord) {
+        timer.end({ target: 'user' });
+        return renderUser(buildUserStatusViewData(repository, userRecord));
+      }
+
+      const template = HtmlService.createTemplateFromFile('select_role');
+      template.url = scriptUrl;
+      template.email = email;
+      return template
+        .evaluate()
+        .setTitle('権限選択')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
+
+    if (adminUser) {
+      timer.end({ target: 'admin-only' });
       return renderAdmin(email);
     }
 
-    if (roleParam === 'user' && userRecord) {
+    if (userRecord) {
+      timer.end({ target: 'user-only' });
       return renderUser(buildUserStatusViewData(repository, userRecord));
     }
 
-    const template = HtmlService.createTemplateFromFile('select_role');
-    template.url = scriptUrl;
-    template.email = email;
-    return template
-      .evaluate()
-      .setTitle('権限選択')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    timer.end({ target: 'no-access' });
+    return HtmlService.createHtmlOutput(
+      '<h2>エラー：アクセス権限がありません</h2><p>担当者マスタまたは管理者マスタに登録されていません。</p>',
+    );
+  } catch (error) {
+    timer.fail(error);
+    throw error;
   }
-
-  if (adminUser) {
-    return renderAdmin(email);
-  }
-
-  if (userRecord) {
-    return renderUser(buildUserStatusViewData(repository, userRecord));
-  }
-
-  return HtmlService.createHtmlOutput(
-    '<h2>エラー：アクセス権限がありません</h2><p>担当者マスタまたは管理者マスタに登録されていません。</p>',
-  );
 }
 
 function renderAdmin(email: string) {
+  const logger = serverLogger.child('renderAdmin', {
+    email: maskEmail(email),
+  });
+  const timer = logger.startTimer('render');
   const template = HtmlService.createTemplateFromFile('admin');
+  const bootstrap = getAdminDashboardBootstrap();
   template.data = {
     email,
-    bootstrap: getAdminDashboardBootstrap(),
+    bootstrap,
   };
+  logger.log('bootstrap-prepared', {
+    expenditureCount: bootstrap.expenditures.length,
+    groupFilterCount: bootstrap.filterOptions.groups.length,
+    typeFilterCount: bootstrap.filterOptions.types.length,
+  });
+  timer.end();
   return template
     .evaluate()
     .setTitle('会計管理ダッシュボード')
@@ -121,6 +154,13 @@ function renderAdmin(email: string) {
 }
 
 function renderUser(userInfo: UserStatusViewData) {
+  serverLogger
+    .child('renderUser', {
+      email: maskEmail(userInfo.email),
+      groupId: userInfo.groupId,
+      historyCount: userInfo.history.length,
+    })
+    .log('render');
   const template = HtmlService.createTemplateFromFile('index');
   template.data = userInfo;
   return template
@@ -131,29 +171,44 @@ function renderUser(userInfo: UserStatusViewData) {
 }
 
 function getAdminDashboardBootstrap() {
+  const logger = serverLogger.child('getAdminDashboardBootstrap');
+  const timer = logger.startTimer('load');
   const repository = AccountingSpreadsheetRepository.openById(SS_ID);
   const expenditures = repository.getExpenditureRecords();
-
-  return {
+  const response = {
     expenditures: mapExpenditureViewRecords(expenditures),
     filterOptions: adminDashboardService.getFilterOptions(expenditures),
     criteria: adminDashboardService.normalizeCriteria(),
   };
+  timer.end({
+    expenditureCount: response.expenditures.length,
+    groupFilterCount: response.filterOptions.groups.length,
+    typeFilterCount: response.filterOptions.types.length,
+  });
+  return response;
 }
 
 function getInquiryDashboardData() {
+  const logger = serverLogger.child('getInquiryDashboardData');
+  const timer = logger.startTimer('load');
   const repository = AccountingSpreadsheetRepository.openById(SS_ID);
-
-  return {
+  const response = {
     inquiries: mapInquiryViewRecords(repository.getInquiryRecords()),
   };
+  timer.end({
+    inquiryCount: response.inquiries.length,
+  });
+  return response;
 }
 
 function getAdminDashboardData(criteriaInput: AdminSearchCriteriaInput = {}) {
+  const logger = serverLogger.child('getAdminDashboardData');
+  const timer = logger.startTimer('load', {
+    criteriaInput,
+  });
   const repository = AccountingSpreadsheetRepository.openById(SS_ID);
   const expenditures = repository.getExpenditureRecords();
-
-  return {
+  const response = {
     expenditures: mapExpenditureViewRecords(
       adminDashboardService.filterAndSort(expenditures, criteriaInput),
     ),
@@ -161,9 +216,20 @@ function getAdminDashboardData(criteriaInput: AdminSearchCriteriaInput = {}) {
     filterOptions: adminDashboardService.getFilterOptions(expenditures),
     criteria: adminDashboardService.normalizeCriteria(criteriaInput),
   };
+  timer.end({
+    filteredExpenditureCount: response.expenditures.length,
+    inquiryCount: response.inquiries.length,
+  });
+  return response;
 }
 
 function updateStatus(type: string, rowIndex: number, newStatus: string) {
+  const logger = serverLogger.child('updateStatus', {
+    type,
+    rowIndex,
+    newStatus,
+  });
+  const timer = logger.startTimer('update');
   const repository = AccountingSpreadsheetRepository.openById(SS_ID);
   const ss = repository.getSpreadsheet();
   let sheet: GoogleAppsScript.Spreadsheet.Sheet | null = null;
@@ -178,10 +244,12 @@ function updateStatus(type: string, rowIndex: number, newStatus: string) {
   }
 
   if (!sheet || columnIndex === 0) {
+    timer.end({ success: false });
     return { success: false };
   }
 
   sheet.getRange(rowIndex, columnIndex).setValue(newStatus);
+  timer.end({ success: true, sheetName: sheet.getName() });
   return { success: true };
 }
 
@@ -189,18 +257,34 @@ function getUserStatus(
   email: string,
   repository: AccountingSpreadsheetRepository = AccountingSpreadsheetRepository.openById(SS_ID),
 ): UserStatusViewData | null {
+  const logger = serverLogger.child('getUserStatus', {
+    email: maskEmail(email),
+  });
+  const timer = logger.startTimer('load');
   const userRecord = repository.findUserByEmail(email);
   if (!userRecord) {
+    timer.end({ found: false });
     return null;
   }
 
-  return buildUserStatusViewData(repository, userRecord);
+  const result = buildUserStatusViewData(repository, userRecord);
+  timer.end({
+    found: true,
+    historyCount: result.history.length,
+    allowedItemCount: result.allowedItems.length,
+  });
+  return result;
 }
 
 function buildUserStatusViewData(
   repository: AccountingSpreadsheetRepository,
   userRecord: UserMasterRecord,
 ): UserStatusViewData {
+  const logger = serverLogger.child('buildUserStatusViewData', {
+    email: maskEmail(userRecord.email),
+    groupId: userRecord.groupId,
+  });
+  const timer = logger.startTimer('build');
   const groupRecords = repository
     .getExpenditureRecords()
     .filter((record) => record.groupId === userRecord.groupId);
@@ -210,7 +294,7 @@ function buildUserStatusViewData(
     formatJstDate,
   );
 
-  return {
+  const viewData = {
     email: userRecord.email,
     groupId: userRecord.groupId,
     groupName: userRecord.groupName,
@@ -225,6 +309,13 @@ function buildUserStatusViewData(
       unsettledItem: summary.unsettledItem,
     }),
   };
+  timer.end({
+    groupRecordCount: groupRecords.length,
+    allowedItemCount: viewData.allowedItems.length,
+    historyCount: viewData.history.length,
+    hasUnsettledItem: Boolean(viewData.unsettledItem),
+  });
+  return viewData;
 }
 
 function getAdminEmails(
@@ -234,6 +325,8 @@ function getAdminEmails(
 }
 
 function processForm(formObj: FormSubmissionInput) {
+  const logger = serverLogger.child('processForm');
+  const timer = logger.startTimer('submit');
   const lock = LockService.getScriptLock();
 
   try {
@@ -248,11 +341,20 @@ function processForm(formObj: FormSubmissionInput) {
 
     const requestType = String(formObj.type ?? '').trim();
     const totalAmount = Number(formObj.totalAmount);
+    logger.log('input-parsed', {
+      email: maskEmail(userEmail),
+      requestType,
+      totalAmount,
+      hasFile: Boolean(formObj.fileName || formObj.mimeType),
+    });
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       throw new Error('申請金額が不正です。');
     }
 
     const items = parseSubmittedItems(formObj.itemsJson);
+    logger.log('items-parsed', {
+      itemCount: items.length,
+    });
     if (items.length === 0) {
       throw new Error('少なくとも1つの品目を入力してください。');
     }
@@ -318,8 +420,15 @@ function processForm(formObj: FormSubmissionInput) {
       );
     }
 
+    timer.end({
+      success: true,
+      requestId: newId,
+      itemCount: items.length,
+      adminEmailCount: adminEmails.length,
+    });
     return { success: true, message: `申請完了 ID: ${newId}` };
   } catch (error) {
+    timer.fail(error);
     return {
       success: false,
       message: `エラー: ${getErrorMessage(error)}`,
@@ -330,8 +439,11 @@ function processForm(formObj: FormSubmissionInput) {
 }
 
 function processInquiry(formObj: InquiryFormInput) {
+  const logger = serverLogger.child('processInquiry');
+  const timer = logger.startTimer('submit');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
+    timer.end({ success: false, reason: 'lock-timeout' });
     return { success: false, message: '処理中です。' };
   }
 
@@ -345,6 +457,11 @@ function processInquiry(formObj: InquiryFormInput) {
 
     const subject = String(formObj.subject ?? '').trim();
     const message = String(formObj.message ?? '').trim();
+    logger.log('input-parsed', {
+      email: maskEmail(email),
+      subjectLength: subject.length,
+      messageLength: message.length,
+    });
     if (!subject || !message) {
       throw new Error('件名と本文を入力してください。');
     }
@@ -375,8 +492,14 @@ function processInquiry(formObj: InquiryFormInput) {
 
     GmailApp.sendEmail(email, '【受付完了】お問い合わせ', bodyContent);
 
+    timer.end({
+      success: true,
+      inquiryId,
+      adminEmailCount: adminEmails.length,
+    });
     return { success: true, message: '送信しました。' };
   } catch (error) {
+    timer.fail(error);
     return {
       success: false,
       message: `エラー: ${getErrorMessage(error)}`,
@@ -404,12 +527,15 @@ Object.assign(globalThis, {
 });
 
 function parseSubmittedItems(itemsJson: string | undefined) {
+  const logger = serverLogger.child('parseSubmittedItems');
+  const timer = logger.startTimer('parse');
   const parsed = JSON.parse(itemsJson ?? '[]');
   if (!Array.isArray(parsed)) {
+    timer.fail(new Error('itemsJson is not array'));
     throw new Error('申請内容の形式が正しくありません。');
   }
 
-  return parsed
+  const items = parsed
     .map((item) => ({
       item: String(item?.item ?? '').trim(),
       price: Number(item?.price ?? 0),
@@ -417,10 +543,24 @@ function parseSubmittedItems(itemsJson: string | undefined) {
       subtotal: Number(item?.subtotal ?? 0),
     }))
     .filter((item) => item.item);
+  timer.end({
+    inputCount: parsed.length,
+    outputCount: items.length,
+  });
+  return items;
 }
 
 function saveAttachmentFile(requestId: string, formObj: FormSubmissionInput): string {
+  const logger = serverLogger.child('saveAttachmentFile', {
+    requestId,
+  });
+  const timer = logger.startTimer('save', {
+    hasFileData: Boolean(formObj.fileData),
+    fileName: formObj.fileName ?? null,
+    mimeType: formObj.mimeType ?? null,
+  });
   if (!formObj.fileData || !formObj.fileName) {
+    timer.end({ stored: false });
     return 'なし';
   }
 
@@ -428,7 +568,12 @@ function saveAttachmentFile(requestId: string, formObj: FormSubmissionInput): st
   const mimeType = String(formObj.mimeType ?? PDF_MIME_TYPE);
   const blob = Utilities.newBlob(Utilities.base64Decode(formObj.fileData), mimeType, fileName);
 
-  return DriveApp.getRootFolder().createFile(blob).setName(`${requestId}_${fileName}`).getUrl();
+  const url = DriveApp.getRootFolder()
+    .createFile(blob)
+    .setName(`${requestId}_${fileName}`)
+    .getUrl();
+  timer.end({ stored: true, url });
+  return url;
 }
 
 function formatJstDate(date: Date): string {

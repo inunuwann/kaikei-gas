@@ -4,11 +4,13 @@ import {
   type ExpenditureRecord,
   type InquiryRecord,
 } from './accounting-domain.ts';
+import { createServerDebugLogger } from './debug-logger.ts';
 
 const MASTER_CACHE_TTL_SECONDS = 300;
 const ADMIN_EMAILS_CACHE_KEY = 'kaikei:master:admin-emails:v1';
 const USERS_CACHE_KEY = 'kaikei:master:users:v1';
 const ALLOWED_ITEMS_CACHE_KEY = 'kaikei:master:allowed-items:v1';
+const repositoryLogger = createServerDebugLogger('AccountingSpreadsheetRepository');
 
 export interface UserMasterRecord {
   email: string;
@@ -75,7 +77,10 @@ export class AccountingSpreadsheetRepository {
   private inquiryRecords: InquiryRecord[] | null = null;
 
   static openById(spreadsheetId: string): AccountingSpreadsheetRepository {
-    return new AccountingSpreadsheetRepository(SpreadsheetApp.openById(spreadsheetId));
+    const timer = repositoryLogger.startTimer('openById', { spreadsheetId });
+    const repository = new AccountingSpreadsheetRepository(SpreadsheetApp.openById(spreadsheetId));
+    timer.end();
+    return repository;
   }
 
   constructor(
@@ -95,13 +100,16 @@ export class AccountingSpreadsheetRepository {
   }
 
   getAdminEmails(): string[] {
+    const timer = repositoryLogger.startTimer('getAdminEmails');
     if (this.adminEmails) {
+      timer.end({ source: 'memory', count: this.adminEmails.length });
       return this.adminEmails;
     }
 
     const cached = this.cacheStore.get<string[]>(ADMIN_EMAILS_CACHE_KEY);
     if (cached) {
       this.adminEmails = cached;
+      timer.end({ source: 'cache', count: cached.length });
       return cached;
     }
 
@@ -110,23 +118,28 @@ export class AccountingSpreadsheetRepository {
     );
     this.adminEmails = loaded;
     this.cacheStore.put(ADMIN_EMAILS_CACHE_KEY, loaded);
+    timer.end({ source: 'sheet', count: loaded.length });
     return loaded;
   }
 
   getUsers(): UserMasterRecord[] {
+    const timer = repositoryLogger.startTimer('getUsers');
     if (this.users) {
+      timer.end({ source: 'memory', count: this.users.length });
       return this.users;
     }
 
     const cached = this.cacheStore.get<UserMasterRecord[]>(USERS_CACHE_KEY);
     if (cached) {
       this.users = cached;
+      timer.end({ source: 'cache', count: cached.length });
       return cached;
     }
 
     const loaded = extractUsers(readSheetBodyValues(this.spreadsheet.getSheetByName('M_Users')));
     this.users = loaded;
     this.cacheStore.put(USERS_CACHE_KEY, loaded);
+    timer.end({ source: 'sheet', count: loaded.length });
     return loaded;
   }
 
@@ -155,13 +168,22 @@ export class AccountingSpreadsheetRepository {
   }
 
   getAllowedItemsByGroup(): AllowedItemsByGroup {
+    const timer = repositoryLogger.startTimer('getAllowedItemsByGroup');
     if (this.allowedItemsByGroup) {
+      timer.end({
+        source: 'memory',
+        groupCount: Object.keys(this.allowedItemsByGroup).length,
+      });
       return this.allowedItemsByGroup;
     }
 
     const cached = this.cacheStore.get<AllowedItemsByGroup>(ALLOWED_ITEMS_CACHE_KEY);
     if (cached) {
       this.allowedItemsByGroup = cached;
+      timer.end({
+        source: 'cache',
+        groupCount: Object.keys(cached).length,
+      });
       return cached;
     }
 
@@ -170,11 +192,17 @@ export class AccountingSpreadsheetRepository {
     );
     this.allowedItemsByGroup = loaded;
     this.cacheStore.put(ALLOWED_ITEMS_CACHE_KEY, loaded);
+    timer.end({
+      source: 'sheet',
+      groupCount: Object.keys(loaded).length,
+    });
     return loaded;
   }
 
   getExpenditureRecords(): ExpenditureRecord[] {
+    const timer = repositoryLogger.startTimer('getExpenditureRecords');
     if (this.expenditureRecords) {
+      timer.end({ source: 'memory', count: this.expenditureRecords.length });
       return this.expenditureRecords;
     }
 
@@ -183,11 +211,14 @@ export class AccountingSpreadsheetRepository {
       .filter((row) => row[0])
       .map((row, index) => mapExpenditureRow(row, index + 2, groupNameMap));
 
+    timer.end({ source: 'sheet', count: this.expenditureRecords.length });
     return this.expenditureRecords;
   }
 
   getInquiryRecords(): InquiryRecord[] {
+    const timer = repositoryLogger.startTimer('getInquiryRecords');
     if (this.inquiryRecords) {
+      timer.end({ source: 'memory', count: this.inquiryRecords.length });
       return this.inquiryRecords;
     }
 
@@ -195,6 +226,7 @@ export class AccountingSpreadsheetRepository {
       .filter((row) => row[0])
       .map((row, index) => mapInquiryRow(row, index + 2));
 
+    timer.end({ source: 'sheet', count: this.inquiryRecords.length });
     return this.inquiryRecords;
   }
 }
@@ -245,17 +277,24 @@ function resolveScriptCache(): CacheAdapter | null {
 }
 
 function readSheetBodyValues(sheet: GoogleAppsScript.Spreadsheet.Sheet | null): unknown[][] {
+  const timer = repositoryLogger.startTimer('readSheetBodyValues', {
+    sheetName: sheet ? sheet.getName() : null,
+  });
   if (!sheet) {
+    timer.end({ rowCount: 0, lastRow: 0, lastColumn: 0 });
     return [];
   }
 
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
   if (lastRow <= 1 || lastColumn === 0) {
+    timer.end({ rowCount: 0, lastRow, lastColumn });
     return [];
   }
 
-  return sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+  timer.end({ rowCount: rows.length, lastRow, lastColumn });
+  return rows;
 }
 
 function mapExpenditureRow(

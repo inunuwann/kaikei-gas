@@ -1,0 +1,112 @@
+<script>
+  (function() {
+    function normalizeClientDebugValue(value) {
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message,
+          stack: value.stack
+        };
+      }
+
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      return value;
+    }
+
+    class ClientDebugLogger {
+      constructor(scope, baseContext) {
+        this.scope = scope;
+        this.baseContext = baseContext || {};
+      }
+
+      log(message, details) {
+        this.write('log', message, details);
+      }
+
+      warn(message, details) {
+        this.write('warn', message, details);
+      }
+
+      error(message, details) {
+        this.write('error', message, details);
+      }
+
+      child(scopeSuffix, baseContext) {
+        return new ClientDebugLogger(`${this.scope}.${scopeSuffix}`, this.merge(baseContext || {}));
+      }
+
+      startTimer(label, details) {
+        const startedAt = performance.now();
+        this.log(`${label}:start`, details || {});
+
+        return {
+          end: (endDetails) => {
+            this.log(`${label}:end`, {
+              durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+              ...(endDetails || {})
+            });
+          },
+          fail: (error, endDetails) => {
+            this.error(`${label}:error`, {
+              durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+              error: normalizeClientDebugValue(error),
+              ...(endDetails || {})
+            });
+          }
+        };
+      }
+
+      merge(details) {
+        return {
+          ...this.baseContext,
+          ...details
+        };
+      }
+
+      write(level, message, details) {
+        const timestamp = new Date().toISOString();
+        const payload = this.merge(details || {});
+        const hasPayload = Object.keys(payload).length > 0;
+        const prefix = `[KaikeiDebug][${timestamp}][${this.scope}] ${message}`;
+
+        if (hasPayload) {
+          console[level](prefix, payload);
+          return;
+        }
+
+        console[level](prefix);
+      }
+    }
+
+    function createDebugLogger(scope, baseContext) {
+      return new ClientDebugLogger(scope, baseContext);
+    }
+
+    window.createDebugLogger = createDebugLogger;
+
+    const windowLogger = createDebugLogger('window');
+
+    window.addEventListener('error', (event) => {
+      windowLogger.error('window.error', {
+        message: event.message,
+        source: event.filename,
+        line: event.lineno,
+        column: event.colno,
+        error: normalizeClientDebugValue(event.error)
+      });
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      windowLogger.error('window.unhandledrejection', {
+        reason: normalizeClientDebugValue(event.reason)
+      });
+    });
+
+    windowLogger.log('client_debug.ready', {
+      href: window.location.href
+    });
+  })();
+</script>

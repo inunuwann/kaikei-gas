@@ -1,10 +1,14 @@
 <script>
   class ItemsTableController {
     constructor(tbody, grandTotalEl, allowedItems) {
+      this.logger = window.createDebugLogger('ItemsTableController');
       this.tbody = tbody;
       this.grandTotalEl = grandTotalEl;
       this.allowedItems = Array.isArray(allowedItems) ? allowedItems : [];
       this.requestType = '事後';
+      this.logger.log('constructed', {
+        allowedItemCount: this.allowedItems.length
+      });
 
       this.tbody.addEventListener('input', (event) => this.handleInput(event));
       this.tbody.addEventListener('change', (event) => this.handleChange(event));
@@ -16,6 +20,10 @@
       this.tbody.innerHTML = '';
       this.addRows(3);
       this.calculateTotal();
+      this.logger.log('reset', {
+        requestType: this.requestType,
+        rowCount: this.tbody.rows.length
+      });
     }
 
     addRows(count) {
@@ -23,10 +31,14 @@
         this.tbody.appendChild(this.createRow());
       }
       this.calculateTotal();
+      this.logger.log('addRows', {
+        addedCount: count,
+        rowCount: this.tbody.rows.length
+      });
     }
 
     getItems() {
-      return Array.from(this.tbody.querySelectorAll('tr'))
+      const items = Array.from(this.tbody.querySelectorAll('tr'))
         .map((row) => {
           const selectEl = row.querySelector('.item-select');
           const inputEl = row.querySelector('.item-input');
@@ -39,6 +51,10 @@
           };
         })
         .filter((item) => item.item);
+      this.logger.log('getItems', {
+        itemCount: items.length
+      });
+      return items;
     }
 
     calculateTotal() {
@@ -55,6 +71,10 @@
 
       this.grandTotalEl.textContent = total.toLocaleString();
       this.grandTotalEl.dataset.value = String(total);
+      this.logger.log('calculateTotal', {
+        rowCount: this.tbody.rows.length,
+        total
+      });
       return total;
     }
 
@@ -74,6 +94,9 @@
       }
 
       if (this.hasDuplicateSelection(target)) {
+        this.logger.warn('duplicate-item-selection', {
+          item: target.value
+        });
         alert(`「${target.value}」は既に入力されています。`);
         target.value = '';
         this.resetRow(target);
@@ -87,6 +110,10 @@
         const row = target.closest('tr');
         row.querySelector('.price-input').value = defaultPrice;
       }
+      this.logger.log('item-selection-changed', {
+        item: target.value,
+        defaultPrice: defaultPrice || null
+      });
       this.calculateTotal();
     }
 
@@ -102,6 +129,9 @@
 
       deleteButton.closest('tr').remove();
       this.calculateTotal();
+      this.logger.log('row-deleted', {
+        rowCount: this.tbody.rows.length
+      });
     }
 
     createRow() {
@@ -163,6 +193,7 @@
 
   class UserDashboardApp {
     constructor(bootstrap, allowedItems, unsettledData) {
+      this.logger = window.createDebugLogger('UserDashboardApp');
       this.bootstrap = bootstrap || {};
       this.allowedItems = Array.isArray(allowedItems) ? allowedItems : [];
       this.unsettledData = unsettledData || null;
@@ -193,9 +224,14 @@
         this.grandTotalEl,
         this.allowedItems
       );
+      this.logger.log('constructed', {
+        allowedItemCount: this.allowedItems.length,
+        hasUnsettledData: Boolean(this.unsettledData)
+      });
     }
 
     init() {
+      const timer = this.logger.startTimer('init');
       document
         .getElementById('startApplicationBtn')
         .addEventListener('click', () => this.startApplication());
@@ -221,9 +257,15 @@
       this.populateTypeOptions();
       this.applyApplicationMode();
       this.switchView('dashboard');
+      timer.end({
+        applicationTypeCount: this.getApplicationTypes().length
+      });
     }
 
     switchView(viewName) {
+      this.logger.log('switchView', {
+        viewName
+      });
       this.views.forEach((name) => {
         const element = document.getElementById(`view-${name}`);
         if (element) {
@@ -234,6 +276,7 @@
     }
 
     startApplication() {
+      this.logger.log('startApplication');
       if (!this.hasAvailableApplicationType()) {
         alert('現在、新しい支出申請を開始できません。進行中の申請を確認してください。');
         return;
@@ -245,6 +288,9 @@
     }
 
     startSettlement() {
+      this.logger.log('startSettlement', {
+        hasUnsettledData: Boolean(this.unsettledData)
+      });
       if (!this.unsettledData) {
         alert('現在、精算が必要な事前請求はありません。');
         return;
@@ -257,6 +303,7 @@
     addRow() {
       this.itemsTable.addRows(1);
       this.updateSummary();
+      this.logger.log('addRow');
     }
 
     handleTypeChange() {
@@ -273,6 +320,9 @@
       this.renderFormState(state);
       this.itemsTable.reset(state.requestType || '事後');
       this.updateSummary();
+      this.logger.log('applyApplicationMode', {
+        requestType: state.requestType
+      });
     }
 
     applySettlementMode() {
@@ -281,6 +331,7 @@
       this.renderFormState(state);
       this.itemsTable.reset('精算');
       this.updateSummary();
+      this.logger.log('applySettlementMode');
     }
 
     buildApplicationState() {
@@ -317,6 +368,12 @@
     }
 
     renderFormState(state) {
+      this.logger.log('renderFormState', {
+        title: state.title,
+        requestType: state.requestType,
+        showTypeSelector: state.showTypeSelector,
+        showFileUpload: state.showFileUpload
+      });
       this.currentRequestType = state.requestType;
       this.requestTypeInput.value = state.requestType || '';
       this.formTitle.textContent = state.title;
@@ -398,6 +455,10 @@
 
       const resolvedType = this.resolveApplicationType(this.typeSelect.value);
       this.typeSelect.value = resolvedType || '';
+      this.logger.log('populateTypeOptions', {
+        optionCount: applicationTypes.length,
+        resolvedType: this.typeSelect.value || null
+      });
     }
 
     getApplicationTypes() {
@@ -425,6 +486,11 @@
 
     updateSummary() {
       const total = this.itemsTable.calculateTotal();
+      this.logger.log('updateSummary', {
+        mode: this.mode,
+        total,
+        budgetLimit: this.budgetLimit
+      });
 
       if (this.mode === 'settlement' && this.unsettledData) {
         const preAmount = Number(this.unsettledData.amount) || 0;
@@ -466,21 +532,34 @@
     }
 
     handleFormSubmit(event) {
+      const timer = this.logger.startTimer('handleFormSubmit');
       event.preventDefault();
 
       if (!this.currentRequestType) {
+        timer.end({
+          success: false,
+          reason: 'no-request-type'
+        });
         alert('現在この申請は利用できません。');
         return;
       }
 
       const items = this.itemsTable.getItems();
       if (items.length === 0) {
+        timer.end({
+          success: false,
+          reason: 'no-items'
+        });
         alert('少なくとも1つの品目を入力してください。');
         return;
       }
 
       const file = this.fileInput.files[0] || null;
       if (!this.validateFile(file)) {
+        timer.end({
+          success: false,
+          reason: 'file-validation'
+        });
         return;
       }
 
@@ -488,18 +567,35 @@
       this.loader.style.display = 'block';
 
       const sendData = (fileInfo) => {
+        this.logger.log('processForm.request', {
+          requestType: this.currentRequestType,
+          itemCount: items.length,
+          totalAmount: this.grandTotalEl.dataset.value,
+          hasFile: Boolean(fileInfo)
+        });
         google.script.run
           .withSuccessHandler((result) => {
             if (result.success) {
+              timer.end({
+                success: true,
+                requestType: this.currentRequestType
+              });
               alert(result.message);
               location.reload();
               return;
             }
 
+            timer.end({
+              success: false,
+              message: result.message
+            });
             alert(result.message);
             this.resetSubmitState();
           })
           .withFailureHandler((error) => {
+            timer.fail(error, {
+              requestType: this.currentRequestType
+            });
             alert(`エラー: ${error}`);
             this.resetSubmitState();
           })
@@ -514,16 +610,29 @@
       };
 
       if (file) {
+        this.logger.log('readFile.start', {
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size
+        });
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
           const fileResult = loadEvent.target && typeof loadEvent.target.result === 'string'
             ? loadEvent.target.result
             : '';
           if (!fileResult) {
+            timer.end({
+              success: false,
+              reason: 'file-read-failed'
+            });
             alert('ファイルの読み込みに失敗しました。');
             this.resetSubmitState();
             return;
           }
+          this.logger.log('readFile.end', {
+            fileName: file.name,
+            size: file.size
+          });
           sendData({
             name: file.name,
             data: fileResult.split(',')[1],
@@ -537,6 +646,7 @@
     }
 
     handleInquirySubmit(event) {
+      const timer = this.logger.startTimer('handleInquirySubmit');
       event.preventDefault();
 
       const inquiryForm = event.currentTarget;
@@ -547,6 +657,9 @@
 
       google.script.run
         .withSuccessHandler((result) => {
+          timer.end({
+            success: Boolean(result && result.success)
+          });
           alert(result.message);
           if (result.success) {
             inquiryForm.reset();
@@ -556,6 +669,7 @@
           loader.style.display = 'none';
         })
         .withFailureHandler((error) => {
+          timer.fail(error);
           alert(`エラー: ${error}`);
           submitButton.disabled = false;
           loader.style.display = 'none';
@@ -567,6 +681,11 @@
     }
 
     validateFile(file) {
+      this.logger.log('validateFile', {
+        hasFile: Boolean(file),
+        fileName: file ? file.name : null,
+        mimeType: file ? file.type : null
+      });
       if (!file && this.fileInput.required) {
         alert('領収書(レシート)の PDF を添付してください。');
         return false;
@@ -578,6 +697,10 @@
 
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
       if (!isPdf) {
+        this.logger.warn('validateFile.invalidPdf', {
+          fileName: file.name,
+          mimeType: file.type
+        });
         alert('添付できるファイルは PDF のみです。');
         return false;
       }
@@ -588,6 +711,7 @@
     resetSubmitState() {
       this.loader.style.display = 'none';
       this.updateSummary();
+      this.logger.log('resetSubmitState');
     }
 
     escapeHtml(value) {
