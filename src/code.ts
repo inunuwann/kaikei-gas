@@ -109,7 +109,10 @@ function doGet(e: GoogleAppsScript.Events.DoGet) {
 
 function renderAdmin(email: string) {
   const template = HtmlService.createTemplateFromFile('admin');
-  template.data = { email };
+  template.data = {
+    email,
+    bootstrap: getAdminDashboardBootstrap(),
+  };
   return template
     .evaluate()
     .setTitle('会計管理ダッシュボード')

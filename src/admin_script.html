@@ -27,6 +27,11 @@
 
       this.applyCriteriaToForm();
       this.updateAmountFilterInputs();
+      if (this.hasBootstrapData()) {
+        this.handleBootstrapData(ADMIN_DASHBOARD_BOOTSTRAP);
+        return;
+      }
+
       this.renderLoadingState();
       this.loadBootstrap();
     }
@@ -55,6 +60,14 @@
         .withSuccessHandler((data) => this.handleBootstrapData(data))
         .withFailureHandler((error) => this.handleLoadError(error, 'dashboard'))
         .getAdminDashboardBootstrap();
+    }
+
+    hasBootstrapData() {
+      return Boolean(
+        typeof ADMIN_DASHBOARD_BOOTSTRAP !== 'undefined' &&
+        ADMIN_DASHBOARD_BOOTSTRAP &&
+        Array.isArray(ADMIN_DASHBOARD_BOOTSTRAP.expenditures)
+      );
     }
 
     handleBootstrapData(data) {
