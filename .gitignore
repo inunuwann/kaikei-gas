@@ -1,5 +1,4 @@
 node_modules/
 dist/
-.clasp.json
 mise.local.toml
 mise.*.local.toml

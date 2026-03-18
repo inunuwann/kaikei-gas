@@ -25,6 +25,20 @@ jobs:
       - name: Build project
         run: mise run build
 
+      - name: Create .clasp.json
+        run: |
+          cat > .clasp.json <<'EOF'
+          {
+            "scriptId": "1qiCeeBTPEVEMcfWVE9HXHuCSq0xyUKBtCcRUnnD6sDlkBp9s2L4xZIkl",
+            "rootDir": "./dist",
+            "scriptExtensions": [".js", ".gs"],
+            "htmlExtensions": [".html"],
+            "jsonExtensions": [".json"],
+            "filePushOrder": [],
+            "skipSubdirectories": false
+          }
+          EOF
+
       - name: Create clasprc.json
         run: echo "$CLASPRC_JSON" > ~/.clasprc.json
         env:
