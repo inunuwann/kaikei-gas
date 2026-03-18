@@ -1,0 +1,7 @@
+[tools]
+# Node.js 24 を指定
+node = "24"
+
+[env]
+# GitHub Actions のランタイム警告を回避する環境変数をプロジェクトレベルで定義
+FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 = "true"

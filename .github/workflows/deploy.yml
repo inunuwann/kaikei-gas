@@ -3,19 +3,21 @@ name: Deploy GAS
 on:
   push:
     branches:
-      - main  # あなたのメインブランチ名に合わせてください（最近は main が主流）
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+
+      # actions/setup-node の代わりに mise-action を使用
+      - uses: jdxcode/mise-action@v2
         with:
-          node-version: '20'
-          cache: 'npm'
+          # mise.toml に基づいてツールをインストール
+          install: true
+          # キャッシュを有効化（npm install を高速化）
+          cache: true
 
       - name: Install dependencies
         run: npm install
@@ -29,5 +31,4 @@ jobs:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
       - name: clasp push
-        # --force をつけることで、GASエディタ側で直接編集していても上書きします
         run: npx clasp push --force
