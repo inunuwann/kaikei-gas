@@ -1,0 +1,334 @@
+<script>
+  class AdminDashboardApp {
+    constructor() {
+      this.criteria = this.createDefaultCriteria();
+      this.filterOptions = { groups: [], types: [] };
+      this.expBody = document.getElementById('expBody');
+      this.inqBody = document.getElementById('inqBody');
+    }
+
+    init() {
+      document
+        .getElementById('searchBtn')
+        .addEventListener('click', () => this.loadData(this.collectCriteriaFromForm()));
+      document
+        .getElementById('resetBtn')
+        .addEventListener('click', () => this.resetFilters());
+      document
+        .getElementById('filterAmountMode')
+        .addEventListener('change', () => this.updateAmountFilterInputs());
+
+      this.applyCriteriaToForm();
+      this.updateAmountFilterInputs();
+      this.loadData(this.criteria);
+    }
+
+    createDefaultCriteria() {
+      return {
+        idQuery: '',
+        dateFrom: '',
+        dateTo: '',
+        groups: [],
+        types: [],
+        amountMode: 'none',
+        amountValue: null,
+        amountMin: null,
+        amountMax: null,
+        contentQuery: '',
+        sortBy: 'date',
+        sortOrder: 'desc'
+      };
+    }
+
+    loadData(criteria) {
+      this.criteria = this.normalizeCriteria(criteria || this.criteria);
+      this.renderLoadingState();
+
+      google.script.run
+        .withSuccessHandler((data) => this.handleDashboardData(data))
+        .withFailureHandler((error) => {
+          const message = `読み込みエラー: ${error}`;
+          this.expBody.innerHTML = `<tr><td colspan="8" style="text-align:center;">${this.escapeHtml(message)}</td></tr>`;
+          this.inqBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">${this.escapeHtml(message)}</td></tr>`;
+        })
+        .getAdminDashboardData(this.criteria);
+    }
+
+    handleDashboardData(data) {
+      this.criteria = this.normalizeCriteria(data.criteria || this.criteria);
+      this.filterOptions = data.filterOptions || { groups: [], types: [] };
+      this.renderFilterOptions();
+      this.applyCriteriaToForm();
+      this.renderExpenditures(data.expenditures || []);
+      this.renderInquiries(data.inquiries || []);
+    }
+
+    renderLoadingState() {
+      this.expBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">読み込み中...</td></tr>';
+      this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">読み込み中...</td></tr>';
+    }
+
+    renderFilterOptions() {
+      this.renderCheckboxGroup(
+        'groupFilterList',
+        'groupFilter',
+        this.filterOptions.groups,
+        this.criteria.groups
+      );
+      this.renderCheckboxGroup(
+        'typeFilterList',
+        'typeFilter',
+        this.filterOptions.types,
+        this.criteria.types
+      );
+    }
+
+    renderCheckboxGroup(containerId, name, options, selectedValues) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+
+      if (!Array.isArray(options) || options.length === 0) {
+        container.innerHTML = '<div class="empty-note">候補がありません</div>';
+        return;
+      }
+
+      const selected = new Set(selectedValues || []);
+      options.forEach((optionValue, index) => {
+        const label = document.createElement('label');
+        label.className = 'checkbox-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.name = name;
+        checkbox.value = optionValue;
+        checkbox.id = `${name}-${index}`;
+        checkbox.checked = selected.has(optionValue);
+
+        const text = document.createElement('span');
+        text.textContent = optionValue;
+
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        container.appendChild(label);
+      });
+    }
+
+    applyCriteriaToForm() {
+      document.getElementById('filterId').value = this.criteria.idQuery || '';
+      document.getElementById('filterDateFrom').value = this.criteria.dateFrom || '';
+      document.getElementById('filterDateTo').value = this.criteria.dateTo || '';
+      document.getElementById('filterContent').value = this.criteria.contentQuery || '';
+      document.getElementById('filterAmountMode').value = this.criteria.amountMode || 'none';
+      document.getElementById('filterAmountValue').value =
+        this.criteria.amountValue === null ? '' : String(this.criteria.amountValue);
+      document.getElementById('filterAmountMin').value =
+        this.criteria.amountMin === null ? '' : String(this.criteria.amountMin);
+      document.getElementById('filterAmountMax').value =
+        this.criteria.amountMax === null ? '' : String(this.criteria.amountMax);
+      document.getElementById('filterSortBy').value = this.criteria.sortBy || 'date';
+      document.getElementById('filterSortOrder').value = this.criteria.sortOrder || 'desc';
+
+      this.updateAmountFilterInputs();
+      this.applyCheckedValues('groupFilter', this.criteria.groups);
+      this.applyCheckedValues('typeFilter', this.criteria.types);
+    }
+
+    applyCheckedValues(name, selectedValues) {
+      const selectedSet = new Set(selectedValues || []);
+      document.querySelectorAll(`input[name="${name}"]`).forEach((checkbox) => {
+        checkbox.checked = selectedSet.has(checkbox.value);
+      });
+    }
+
+    updateAmountFilterInputs() {
+      const mode = document.getElementById('filterAmountMode').value;
+      const amountValue = document.getElementById('filterAmountValue');
+      const amountRange = document.getElementById('filterAmountRange');
+
+      amountValue.style.display =
+        mode === 'exact' || mode === 'min' || mode === 'max' ? 'block' : 'none';
+      amountRange.style.display = mode === 'range' ? 'grid' : 'none';
+    }
+
+    collectCriteriaFromForm() {
+      return this.normalizeCriteria({
+        idQuery: document.getElementById('filterId').value,
+        dateFrom: document.getElementById('filterDateFrom').value,
+        dateTo: document.getElementById('filterDateTo').value,
+        groups: this.collectCheckedValues('groupFilter'),
+        types: this.collectCheckedValues('typeFilter'),
+        amountMode: document.getElementById('filterAmountMode').value,
+        amountValue: document.getElementById('filterAmountValue').value,
+        amountMin: document.getElementById('filterAmountMin').value,
+        amountMax: document.getElementById('filterAmountMax').value,
+        contentQuery: document.getElementById('filterContent').value,
+        sortBy: document.getElementById('filterSortBy').value,
+        sortOrder: document.getElementById('filterSortOrder').value
+      });
+    }
+
+    collectCheckedValues(name) {
+      return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(
+        (checkbox) => checkbox.value
+      );
+    }
+
+    normalizeCriteria(criteria) {
+      return {
+        idQuery: String(criteria.idQuery || '').trim(),
+        dateFrom: criteria.dateFrom || '',
+        dateTo: criteria.dateTo || '',
+        groups: Array.isArray(criteria.groups) ? criteria.groups.filter(Boolean) : [],
+        types: Array.isArray(criteria.types) ? criteria.types.filter(Boolean) : [],
+        amountMode: criteria.amountMode || 'none',
+        amountValue: this.parseNumber(criteria.amountValue),
+        amountMin: this.parseNumber(criteria.amountMin),
+        amountMax: this.parseNumber(criteria.amountMax),
+        contentQuery: String(criteria.contentQuery || '').trim(),
+        sortBy: criteria.sortBy === 'id' ? 'id' : 'date',
+        sortOrder: criteria.sortOrder === 'asc' ? 'asc' : 'desc'
+      };
+    }
+
+    parseNumber(value) {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    resetFilters() {
+      this.criteria = this.createDefaultCriteria();
+      this.applyCriteriaToForm();
+      this.loadData(this.criteria);
+    }
+
+    renderExpenditures(records) {
+      this.expBody.innerHTML = '';
+      if (!Array.isArray(records) || records.length === 0) {
+        this.expBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">データなし</td></tr>';
+        return;
+      }
+
+      records.forEach((record) => {
+        const row = document.createElement('tr');
+        const fileLink =
+          record.file && record.file !== 'なし'
+            ? `<a href="${this.escapeAttribute(record.file)}" target="_blank" class="link-btn">確認</a>`
+            : '-';
+        const statusOptions = ['申請中', '承認済', '未精算', '精算完了', '却下']
+          .map((option) => {
+            const selected = record.status === option ? 'selected' : '';
+            return `<option value="${this.escapeAttribute(option)}" ${selected}>${this.escapeHtml(option)}</option>`;
+          })
+          .join('');
+
+        row.innerHTML = `
+          <td>${this.escapeHtml(record.id)}</td>
+          <td>${this.escapeHtml(record.date)}</td>
+          <td><strong>${this.escapeHtml(record.group)}</strong></td>
+          <td>${this.escapeHtml(record.type)}</td>
+          <td>¥${Number(record.amount).toLocaleString()}</td>
+          <td style="max-width:220px; font-size:0.82em;">${this.escapeHtml(record.content)}</td>
+          <td>${fileLink}</td>
+          <td>
+            <select class="status-select" data-type="expenditure" data-row-index="${record.rowIndex}">
+              ${statusOptions}
+            </select>
+          </td>
+        `;
+        this.expBody.appendChild(row);
+      });
+
+      this.attachStatusHandlers(this.expBody);
+    }
+
+    renderInquiries(records) {
+      this.inqBody.innerHTML = '';
+      if (!Array.isArray(records) || records.length === 0) {
+        this.inqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">データなし</td></tr>';
+        return;
+      }
+
+      records.forEach((record) => {
+        const row = document.createElement('tr');
+        const statusOptions = ['未対応', '対応中', '完了']
+          .map((option) => {
+            const selected = record.status === option ? 'selected' : '';
+            return `<option value="${this.escapeAttribute(option)}" ${selected}>${this.escapeHtml(option)}</option>`;
+          })
+          .join('');
+
+        row.innerHTML = `
+          <td>${this.escapeHtml(record.id)}</td>
+          <td>${this.escapeHtml(record.date)}</td>
+          <td>${this.escapeHtml(record.group)}</td>
+          <td style="font-size:0.82em;">${this.escapeHtml(record.sender)}</td>
+          <td>${this.escapeHtml(record.subject)}</td>
+          <td style="max-width:300px; font-size:0.82em;">${this.escapeHtml(record.message)}</td>
+          <td>
+            <select class="status-select" data-type="inquiry" data-row-index="${record.rowIndex}">
+              ${statusOptions}
+            </select>
+          </td>
+        `;
+        this.inqBody.appendChild(row);
+      });
+
+      this.attachStatusHandlers(this.inqBody);
+    }
+
+    attachStatusHandlers(container) {
+      container.querySelectorAll('.status-select').forEach((select) => {
+        select.addEventListener('change', (event) => {
+          const target = event.currentTarget;
+          this.updateStatus(target.dataset.type, Number(target.dataset.rowIndex), target.value);
+        });
+      });
+    }
+
+    updateStatus(type, rowIndex, newStatus) {
+      google.script.run
+        .withSuccessHandler(() => this.loadData(this.criteria))
+        .withFailureHandler((error) => alert(`更新エラー: ${error}`))
+        .updateStatus(type, rowIndex, newStatus);
+    }
+
+    escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    escapeAttribute(value) {
+      return this.escapeHtml(value).replace(/`/g, '&#96;');
+    }
+  }
+
+  const adminDashboardApp = new AdminDashboardApp();
+
+  function showTab(tabName, button) {
+    document.getElementById('tab-expenditure').style.display = 'none';
+    document.getElementById('tab-inquiry').style.display = 'none';
+    document.getElementById(`tab-${tabName}`).style.display = 'block';
+
+    document.querySelectorAll('.nav-btn').forEach((navButton) => {
+      navButton.classList.remove('active');
+    });
+    if (button) {
+      button.classList.add('active');
+    }
+  }
+
+  function reloadCurrentFilters() {
+    adminDashboardApp.loadData(adminDashboardApp.criteria);
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    adminDashboardApp.init();
+  });
+</script>

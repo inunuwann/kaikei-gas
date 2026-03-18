@@ -4,48 +4,200 @@
     <base target="_top">
     <?!= include('css'); ?>
     <style>
-      .admin-container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; }
+      .admin-container { max-width: 1280px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; }
       .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-      .nav-btn { background: none; border: none; font-size: 1.1em; padding: 10px 20px; cursor: pointer; color: #666; font-weight: bold; }
+      .nav-btn { background: none; border: none; font-size: 1.05em; padding: 10px 16px; cursor: pointer; color: #666; font-weight: bold; }
       .nav-btn.active { color: #007bff; border-bottom: 3px solid #007bff; }
-      
+
+      .filter-panel {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 18px;
+      }
+      .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .filter-group label {
+        display: block;
+        font-size: 0.9em;
+        font-weight: bold;
+        margin-bottom: 6px;
+        color: #334155;
+      }
+      .filter-group-wide { grid-column: 1 / -1; }
+      .filter-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .action-btn {
+        border: none;
+        border-radius: 6px;
+        padding: 10px 16px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .search-btn { background: #007bff; color: #fff; }
+      .reset-btn { background: #e2e8f0; color: #1e293b; }
+      .refresh-btn { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px 12px;
+        max-height: 180px;
+        overflow-y: auto;
+        padding: 10px;
+        background: #fff;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+      }
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.92em;
+      }
+      .helper-text {
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 0.85em;
+      }
+      .amount-inputs,
+      .sort-controls {
+        display: grid;
+        gap: 8px;
+      }
+      .amount-range {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
       .data-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-      .data-table th { background: #343a40; color: #fff; padding: 10px; position: sticky; top: 0; }
+      .data-table th { background: #343a40; color: #fff; padding: 10px; position: sticky; top: 0; z-index: 1; }
       .data-table td { border-bottom: 1px solid #ddd; padding: 10px; vertical-align: middle; }
       .data-table tr:hover { background-color: #f8f9fa; }
-      
+
       .status-select { padding: 5px; border-radius: 4px; border: 1px solid #ced4da; font-weight: bold; }
-      /* ステータスごとの色 */
-      .st-pending { color: #d35400; }
-      .st-approved { color: #27ae60; }
-      .st-unsettled { color: #8e44ad; }
-      .st-rejected { color: #c0392b; }
-      
       .link-btn { text-decoration: none; background: #17a2b8; color: white; padding: 3px 8px; border-radius: 3px; font-size: 0.8em; }
-      .refresh-btn { float: right; background: #28a745; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; }
+      .empty-note {
+        text-align: center;
+        color: #64748b;
+        font-size: 0.9em;
+      }
     </style>
   </head>
   <body>
     <div class="admin-container">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h1>会計管理ダッシュボード</h1>
-    <div>
-    <a href="<?= ScriptApp.getService().getUrl() ?>?role=user" style="margin-right:15px; font-size:0.9em;">申請画面へ切替</a>
-    <button class="refresh-btn" onclick="loadData()">↻ 更新</button>
-  </div>
-</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+        <h1 style="margin-bottom:0;">会計管理ダッシュボード</h1>
+        <div>
+          <a href="<?= ScriptApp.getService().getUrl() ?>?role=user" style="margin-right:15px; font-size:0.9em;">申請画面へ切替</a>
+          <button class="refresh-btn" type="button" onclick="reloadCurrentFilters()">↻ 更新</button>
+        </div>
+      </div>
 
       <div class="nav-tabs">
-        <button class="nav-btn active" onclick="showTab('expenditure')">支出・精算管理</button>
-        <button class="nav-btn" onclick="showTab('inquiry')">お問い合わせ管理</button>
+        <button class="nav-btn active" type="button" onclick="showTab('expenditure', this)">支出・精算管理</button>
+        <button class="nav-btn" type="button" onclick="showTab('inquiry', this)">お問い合わせ管理</button>
       </div>
 
       <div id="tab-expenditure">
+        <div class="filter-panel">
+          <div class="filter-grid">
+            <div class="filter-group">
+              <label for="filterId">ID検索</label>
+              <input id="filterId" class="form-control" type="text" placeholder="例: EXP-20260318">
+            </div>
+
+            <div class="filter-group">
+              <label for="filterDateFrom">日付検索（開始）</label>
+              <input id="filterDateFrom" class="form-control" type="date">
+            </div>
+
+            <div class="filter-group">
+              <label for="filterDateTo">日付検索（終了）</label>
+              <input id="filterDateTo" class="form-control" type="date">
+            </div>
+
+            <div class="filter-group">
+              <label for="filterContent">内容検索</label>
+              <input id="filterContent" class="form-control" type="text" placeholder="キーワードを入力">
+            </div>
+
+            <div class="filter-group">
+              <label for="filterAmountMode">金額検索</label>
+              <div class="amount-inputs">
+                <select id="filterAmountMode" class="form-control">
+                  <option value="none">指定なし</option>
+                  <option value="exact">一致</option>
+                  <option value="min">以上</option>
+                  <option value="max">以下</option>
+                  <option value="range">範囲</option>
+                </select>
+                <input id="filterAmountValue" class="form-control" type="number" min="0" placeholder="金額" style="display:none;">
+                <div id="filterAmountRange" class="amount-range" style="display:none;">
+                  <input id="filterAmountMin" class="form-control" type="number" min="0" placeholder="最小金額">
+                  <input id="filterAmountMax" class="form-control" type="number" min="0" placeholder="最大金額">
+                </div>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label for="filterSortBy">並び替え</label>
+              <div class="sort-controls">
+                <select id="filterSortBy" class="form-control">
+                  <option value="date">日付</option>
+                  <option value="id">ID</option>
+                </select>
+                <select id="filterSortOrder" class="form-control">
+                  <option value="desc">降順</option>
+                  <option value="asc">昇順</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="filter-group filter-group-wide">
+              <label>団体名検索</label>
+              <div id="groupFilterList" class="checkbox-grid">
+                <div class="empty-note">読み込み中...</div>
+              </div>
+              <div class="helper-text">複数団体を同時に選択できます。</div>
+            </div>
+
+            <div class="filter-group filter-group-wide">
+              <label>タイプ検索</label>
+              <div id="typeFilterList" class="checkbox-grid">
+                <div class="empty-note">読み込み中...</div>
+              </div>
+              <div class="helper-text">複数タイプを同時に選択できます。</div>
+            </div>
+          </div>
+
+          <div class="filter-actions">
+            <button id="searchBtn" class="action-btn search-btn" type="button">検索</button>
+            <button id="resetBtn" class="action-btn reset-btn" type="button">条件クリア</button>
+          </div>
+        </div>
+
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>ID</th><th>日付</th><th>団体名</th><th>タイプ</th><th>金額</th><th>内容</th><th>証憑</th><th>ステータス変更</th>
+                <th>ID</th>
+                <th>日付</th>
+                <th>団体名</th>
+                <th>タイプ</th>
+                <th>金額</th>
+                <th>内容</th>
+                <th>領収書</th>
+                <th>ステータス変更</th>
               </tr>
             </thead>
             <tbody id="expBody">
@@ -60,7 +212,13 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>ID</th><th>日付</th><th>団体名</th><th>送信者</th><th>件名</th><th>本文</th><th>ステータス変更</th>
+                <th>ID</th>
+                <th>日付</th>
+                <th>団体名</th>
+                <th>送信者</th>
+                <th>件名</th>
+                <th>本文</th>
+                <th>ステータス変更</th>
               </tr>
             </thead>
             <tbody id="inqBody">
@@ -71,107 +229,6 @@
       </div>
     </div>
 
-    <script>
-      window.onload = loadData;
-
-      function loadData() {
-        document.getElementById('expBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">読み込み中...</td></tr>';
-        
-        google.script.run.withSuccessHandler(renderData).getAdminDashboardData();
-      }
-
-      function renderData(data) {
-        renderExpenditure(data.expenditures);
-        renderInquiry(data.inquiries);
-      }
-
-      function renderExpenditure(list) {
-        const tbody = document.getElementById('expBody');
-        tbody.innerHTML = '';
-        if(list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">データなし</td></tr>';
-          return;
-        }
-
-        list.forEach(item => {
-          const tr = document.createElement('tr');
-          const fileLink = item.file && item.file !== 'なし' ? `<a href="${item.file}" target="_blank" class="link-btn">確認</a>` : '-';
-          
-          // ステータスプルダウン
-          const options = ['申請中', '承認済', '未精算', '精算完了', '却下']
-            .map(opt => `<option value="${opt}" ${item.status === opt ? 'selected' : ''}>${opt}</option>`)
-            .join('');
-
-          tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.date}</td>
-            <td><strong>${item.group}</strong></td>
-            <td>${item.type}</td>
-            <td>¥${Number(item.amount).toLocaleString()}</td>
-            <td style="max-width:200px; font-size:0.8em;">${item.content}</td>
-            <td>${fileLink}</td>
-            <td>
-              <select class="status-select" onchange="updateStatus('expenditure', ${item.rowIndex}, this.value)">
-                ${options}
-              </select>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      function renderInquiry(list) {
-        const tbody = document.getElementById('inqBody');
-        tbody.innerHTML = '';
-        if(list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">データなし</td></tr>';
-          return;
-        }
-
-        list.forEach(item => {
-          const tr = document.createElement('tr');
-          // ステータスプルダウン
-          const options = ['未対応', '対応中', '完了']
-            .map(opt => `<option value="${opt}" ${item.status === opt ? 'selected' : ''}>${opt}</option>`)
-            .join('');
-
-          tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.date}</td>
-            <td>${item.group}</td>
-            <td style="font-size:0.8em;">${item.sender}</td>
-            <td>${item.subject}</td>
-            <td style="max-width:300px; font-size:0.8em;">${item.message}</td>
-            <td>
-              <select class="status-select" onchange="updateStatus('inquiry', ${item.rowIndex}, this.value)">
-                ${options}
-              </select>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      function updateStatus(type, rowIndex, newVal) {
-        google.script.run
-          .withSuccessHandler(() => {
-            // 更新成功時は特に何もしない（トースト通知などを出しても良い）
-            console.log("Updated!");
-          })
-          .withFailureHandler((e) => alert("更新エラー: " + e))
-          .updateStatus(type, rowIndex, newVal);
-      }
-
-      // タブ切り替え
-      function showTab(tabName) {
-        document.getElementById('tab-expenditure').style.display = 'none';
-        document.getElementById('tab-inquiry').style.display = 'none';
-        document.getElementById('tab-' + tabName).style.display = 'block';
-
-        const btns = document.querySelectorAll('.nav-btn');
-        btns.forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
-      }
-    </script>
+    <?!= include('admin_script'); ?>
   </body>
 </html>
