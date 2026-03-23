@@ -3,3 +3,9 @@ dist/
 mise.local.toml
 mise.*.local.toml
 docs/test-data/*
+docs/.DS_Store
+dist/.DS_Store
+node_modules/.DS_Store
+src/.DS_Store
+test/.DS_Store
+.DS_Store

@@ -148,7 +148,7 @@
     }
 
     buildItemInput() {
-      return '<input type="text" class="item-input input-sm" placeholder="品名を入力" required>';
+      return '<input type="text" class="item-input input-sm" placeholder="品名を入力">';
     }
 
     buildItemSelect() {
@@ -161,7 +161,7 @@
         })
       );
 
-      return `<select class="item-select input-sm" required>${options.join('')}</select>`;
+      return `<select class="item-select input-sm">${options.join('')}</select>`;
     }
 
     hasDuplicateSelection(currentSelect) {
