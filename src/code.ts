@@ -46,6 +46,16 @@ interface UserStatusViewData {
   } | null;
   requestAvailability: RequestAvailabilityMap;
   formBootstrap: ReturnType<typeof UserFormViewModelFactory.buildBootstrap>;
+  inquiries: Array<{
+    rowIndex?: number;
+    id: string;
+    date: string;
+    group: string;
+    sender: string;
+    subject: string;
+    message: string;
+    status: string;
+  }>;
 }
 
 interface FormSubmissionInput {
@@ -287,6 +297,10 @@ function buildUserStatusViewData(
     formatJstDate,
   );
 
+  const groupInquiries = repository
+    .getInquiryRecords()
+    .filter((record) => record.group === userRecord.groupName);
+
   const viewData = {
     email: userRecord.email,
     groupId: userRecord.groupId,
@@ -301,6 +315,7 @@ function buildUserStatusViewData(
       requestAvailability: summary.requestAvailability,
       unsettledItem: summary.unsettledItem,
     }),
+    inquiries: mapInquiryViewRecords(groupInquiries),
   };
   timer.end({
     groupRecordCount: groupRecords.length,

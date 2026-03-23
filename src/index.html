@@ -94,6 +94,49 @@
         </tbody>
       </table>
     </div>
+
+    <h3 style="margin-top: 30px;">お問い合わせ状況一覧</h3>
+    <div class="table-responsive">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>日付</th>
+            <th>件名</th>
+            <th>内容</th>
+            <th>状況</th>
+          </tr>
+        </thead>
+        <tbody>
+          <? if (data.inquiries && data.inquiries.length > 0) { ?>
+          <? for (var i = 0; i < data.inquiries.length; i++) {
+                 var inq = data.inquiries[i];
+                 var stClass = '';
+                 if (inq.status === '対応完了' || inq.status === '解決済') stClass = 'status-ok';
+                 else if (inq.status === '未対応') stClass = 'status-warn';
+            ?>
+          <tr>
+            <td>
+              <?= inq.date ?>
+            </td>
+            <td>
+              <?= inq.subject ?>
+            </td>
+            <td title="<?= inq.message ?>">
+              <?= inq.message.length > 25 ? (inq.message.substring(0, 25) + '...') : inq.message ?>
+            </td>
+            <td><span class="badge <?= stClass ?>">
+                <?= inq.status ?>
+              </span></td>
+          </tr>
+          <? } ?>
+          <? } else { ?>
+          <tr>
+            <td colspan="4" style="text-align:center;">お問い合わせ履歴はありません</td>
+          </tr>
+          <? } ?>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div id="view-form" class="container" style="display:none;">
