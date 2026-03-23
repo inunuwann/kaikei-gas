@@ -581,7 +581,11 @@
                 requestType: this.currentRequestType
               });
               alert(result.message);
-              location.reload();
+              if (typeof APP_URL !== 'undefined' && APP_URL) {
+                window.top.location.href = APP_URL;
+              } else {
+                window.parent.location.reload();
+              }
               return;
             }
 
@@ -730,15 +734,15 @@
     UNSETTLED_DATA
   );
 
-  window.switchView = function(viewName) {
+  window.switchView = function (viewName) {
     userDashboardApp.switchView(viewName);
   };
 
-  window.startApplication = function() {
+  window.startApplication = function () {
     userDashboardApp.startApplication();
   };
 
-  window.startSettlement = function() {
+  window.startSettlement = function () {
     userDashboardApp.startSettlement();
   };
 
