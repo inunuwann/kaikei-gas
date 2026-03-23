@@ -515,19 +515,16 @@ function authorize() {
   GmailApp.sendEmail(email, '権限承認テスト', 'GASのアクセス承認が正常に完了しました。');
 }
 
-// GAS はエントリポイントをグローバル関数として解決する。
-// bundle 後も公開関数が残るように明示的に紐付ける。
-Object.assign(globalThis, {
-  doGet,
-  getAdminDashboardBootstrap,
-  getAdminDashboardData,
-  getInquiryDashboardData,
-  updateStatus,
-  processForm,
-  processInquiry,
-  include,
-  authorize,
-});
+declare let global: any;
+global.doGet = doGet;
+global.getAdminDashboardBootstrap = getAdminDashboardBootstrap;
+global.getAdminDashboardData = getAdminDashboardData;
+global.getInquiryDashboardData = getInquiryDashboardData;
+global.updateStatus = updateStatus;
+global.processForm = processForm;
+global.processInquiry = processInquiry;
+global.include = include;
+global.authorize = authorize;
 
 function parseSubmittedItems(itemsJson: string | undefined) {
   const logger = serverLogger.child('parseSubmittedItems');
