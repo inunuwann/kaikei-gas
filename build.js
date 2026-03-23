@@ -1,7 +1,7 @@
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { build } = require('esbuild');
-const { GasPlugin } = require('esbuild-gas-plugin');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { build } from 'esbuild';
+import { GasPlugin } from 'esbuild-gas-plugin';
 
 const DIST_DIR = 'dist';
 const SRC_DIR = 'src';

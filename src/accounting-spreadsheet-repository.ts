@@ -322,7 +322,7 @@ function mapExpenditureRow(
   };
 }
 
-function mapInquiryRow(row: unknown[], rowIndex: number): InquiryRecord {
+export function mapInquiryRow(row: unknown[], rowIndex: number): InquiryRecord {
   const date = asDate(row[1]);
 
   return {

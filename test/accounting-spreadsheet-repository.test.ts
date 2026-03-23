@@ -5,6 +5,7 @@ import {
   extractAdminEmails,
   extractAllowedItemsByGroup,
   extractUsers,
+  mapInquiryRow,
 } from '../src/accounting-spreadsheet-repository.ts';
 
 test('extractAdminEmails trims values and ignores invalid rows', () => {
@@ -58,4 +59,18 @@ test('extractAllowedItemsByGroup groups master rows by group id', () => {
       { name: '備品購入', defaultPrice: 3000 },
     ],
   });
+});
+
+test('mapInquiryRow maps master rows into inquiry records', () => {
+  const row = ['INQ-2026', '2026/03/18 12:00:00', '団体A', 'user@example.com', '質問', '本文です', '未対応'];
+
+  const record = mapInquiryRow(row, 2);
+  assert.equal(record.id, 'INQ-2026');
+  assert.equal(record.group, '団体A');
+  assert.equal(record.sender, 'user@example.com');
+  assert.equal(record.subject, '質問');
+  assert.equal(record.message, '本文です');
+  assert.equal(record.status, '未対応');
+  assert.equal(record.rowIndex, 2);
+  assert.equal(record.date instanceof Date, true);
 });
