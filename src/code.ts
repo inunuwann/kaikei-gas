@@ -506,6 +506,15 @@ function include(filename: string) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+/**
+ * 初回デプロイ時などにエディタから手動実行し、
+ * GmailApp などの権限承認（OAuth）を行うための関数です。
+ */
+function authorize() {
+  const email = Session.getActiveUser().getEmail();
+  GmailApp.sendEmail(email, '権限承認テスト', 'GASのアクセス承認が正常に完了しました。');
+}
+
 // GAS はエントリポイントをグローバル関数として解決する。
 // bundle 後も公開関数が残るように明示的に紐付ける。
 Object.assign(globalThis, {
@@ -517,6 +526,7 @@ Object.assign(globalThis, {
   processForm,
   processInquiry,
   include,
+  authorize,
 });
 
 function parseSubmittedItems(itemsJson: string | undefined) {
