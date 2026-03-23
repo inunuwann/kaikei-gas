@@ -581,11 +581,13 @@
                 requestType: this.currentRequestType
               });
               alert(result.message);
-              if (typeof APP_URL !== 'undefined' && APP_URL) {
-                window.top.location.href = APP_URL;
-              } else {
-                window.parent.location.reload();
-              }
+              // GASのiframeサンドボックスによるURL遷移のブロックを回避するため、
+              // ページ全体の再読み込みではなくSPAとしてフォームをリセットしダッシュボードへ戻します
+              this.form.reset();
+              this.itemsTable.reset(this.currentRequestType);
+              this.fileInput.value = '';
+              this.resetSubmitState();
+              this.switchView('dashboard');
               return;
             }
 
