@@ -57,4 +57,4 @@ jobs:
             echo "Error: DEPLOYMENT_ID secret is missing!"
             exit 1
           fi
-          npx clasp deploy -i "$DEPLOYMENT_ID" -d "Auto-deploy via GitHub Actions #${{ github.run_number }}"
+          npx @google/clasp deploy -i "$DEPLOYMENT_ID" -d "Auto-deploy via GitHub Actions #${{ github.run_number }}"
