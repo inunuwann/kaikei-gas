@@ -31,7 +31,7 @@ const REQUEST_BLOCK_MESSAGES: Record<ApplicationRequestType, string> = {
 export interface GroupAccountingSummary {
   usedAmount: number;
   remainingBudget: number;
-  unsettledItem: UnsettledItem | null;
+  unsettledItems: UnsettledItem[]; // ← unsettledItem から unsettledItems (配列)に変更
   history: UserHistoryEntry[];
   requestAvailability: RequestAvailabilityMap;
 }
@@ -70,8 +70,8 @@ export class ExpenditureRequestPolicy {
   }
 
   static assertCanStartSettlement(records: ExpenditureRecord[]): void {
-    if (!this.findUnsettledAdvance(records)) {
-      throw new Error('通常精算対象の通常請求が見つかりません。');
+    if (this.findUnsettledItems(records).length === 0) {
+      throw new Error('精算対象の請求が見つかりません。');
     }
   }
 
@@ -99,25 +99,24 @@ export class ExpenditureRequestPolicy {
     }
   }
 
-  static findUnsettledAdvance(
+  static findUnsettledItems(
     records: ExpenditureRecord[],
     formatDate: (date: Date) => string = defaultDateFormatter,
-  ): UnsettledItem | null {
-    const candidates = records
-      .filter((record) => record.type === STANDARD_REQUEST_TYPE && record.status === '未精算')
-      .sort(compareRecordsDesc);
-
-    const target = candidates[0];
-    if (!target) {
-      return null;
-    }
-
-    return {
-      id: target.id,
-      amount: target.amount,
-      content: stripDetailSuffix(target.content),
-      date: formatDate(target.date),
-    };
+  ): UnsettledItem[] {
+    // 通常請求（事前）と事後請求のうち、未精算のものをすべて取得
+    return records
+      .filter(
+        (record) =>
+          (record.type === STANDARD_REQUEST_TYPE || record.type === REIMBURSEMENT_REQUEST_TYPE) &&
+          record.status === '未精算',
+      )
+      .sort(compareRecordsDesc)
+      .map((target) => ({
+        id: target.id,
+        amount: target.amount,
+        content: stripDetailSuffix(target.content),
+        date: formatDate(target.date),
+      }));
   }
 
   static summarizeGroupRecords(
@@ -142,7 +141,7 @@ export class ExpenditureRequestPolicy {
     return {
       usedAmount,
       remainingBudget: budgetTotal - usedAmount,
-      unsettledItem: this.findUnsettledAdvance(sorted, formatDate),
+      unsettledItems: this.findUnsettledItems(sorted, formatDate),
       history,
       requestAvailability: {
         [STANDARD_REQUEST_TYPE]: this.getRequestAvailability(sorted, STANDARD_REQUEST_TYPE),

@@ -145,6 +145,10 @@
 
     <div id="settlementInfo" class="info-box settlement-box" style="display:none;">
       <h3>通常精算の計算</h3>
+      <div class="form-group" style="margin-bottom: 15px;">
+        <label for="settlementTargetSelect">精算対象の申請</label>
+        <select id="settlementTargetSelect" class="form-control"></select>
+      </div>
       <div class="budget-summary">
         <div><span class="label">通常請求額</span><span class="value" id="preAmountDisplay">¥0</span></div>
         <div class="calc-operator">-</div>
@@ -233,7 +237,7 @@
 
   <script>
     var ALLOWED_ITEMS = <?!= JSON.stringify(data.allowedItems) ?>;
-    var UNSETTLED_DATA = <?!= JSON.stringify(data.unsettledItem) ?>;
+    var UNSETTLED_ITEMS = <?!= JSON.stringify(data.unsettledItems) ?>;
     var USER_FORM_BOOTSTRAP = <?!= JSON.stringify(data.formBootstrap) ?>;
     var APP_URL = "<?= ScriptApp.getService().getUrl() ?>";
   </script>

@@ -38,7 +38,7 @@ interface UserStatusViewData {
     amount: number;
     content: string;
   }>;
-  unsettledItem: {
+  unsettledItems: {
     id: string;
     amount: number;
     content: string;
@@ -309,11 +309,11 @@ function buildUserStatusViewData(
     remainingBudget: summary.remainingBudget,
     allowedItems: repository.getAllowedItems(userRecord.groupId),
     history: summary.history,
-    unsettledItem: summary.unsettledItem,
+    unsettledItems: summary.unsettledItems,
     requestAvailability: summary.requestAvailability,
     formBootstrap: UserFormViewModelFactory.buildBootstrap({
       requestAvailability: summary.requestAvailability,
-      unsettledItem: summary.unsettledItem,
+      unsettledItems: summary.unsettledItems,
     }),
     inquiries: mapInquiryViewRecords(groupInquiries),
   };

@@ -1,11 +1,12 @@
 <script>
   class ItemsTableController {
-    constructor(tbody, grandTotalEl, allowedItems) {
+    constructor(tbody, grandTotalEl, allowedItems, onChange) {
       this.logger = window.createDebugLogger('ItemsTableController');
       this.tbody = tbody;
       this.grandTotalEl = grandTotalEl;
       this.allowedItems = Array.isArray(allowedItems) ? allowedItems : [];
       this.requestType = '事後請求';
+      this.onChange = onChange;
       this.logger.log('constructed', {
         allowedItemCount: this.allowedItems.length
       });
@@ -75,6 +76,11 @@
         rowCount: this.tbody.rows.length,
         total
       });
+
+      if (typeof this.onChange === 'function') {
+        this.onChange(total);
+      }
+
       return total;
     }
 
@@ -192,11 +198,12 @@
   }
 
   class UserDashboardApp {
-    constructor(bootstrap, allowedItems, unsettledData) {
+    constructor(bootstrap, allowedItems, unsettledItems) {
       this.logger = window.createDebugLogger('UserDashboardApp');
       this.bootstrap = bootstrap || {};
       this.allowedItems = Array.isArray(allowedItems) ? allowedItems : [];
-      this.unsettledData = unsettledData || null;
+      this.unsettledItems = Array.isArray(unsettledItems) ? unsettledItems : [];
+      this.currentUnsettledItem = this.unsettledItems[0] || null;
       this.mode = 'application';
       this.currentRequestType = null;
 
@@ -219,14 +226,18 @@
       this.preAmountDisplay = document.getElementById('preAmountDisplay');
       this.settlementTotalDisplay = document.getElementById('settlementTotalDisplay');
       this.balanceDisplay = document.getElementById('balanceDisplay');
+
+      this.settlementTargetSelect = document.getElementById('settlementTargetSelect');
+
       this.itemsTable = new ItemsTableController(
         document.getElementById('itemsBody'),
         this.grandTotalEl,
-        this.allowedItems
+        this.allowedItems,
+        () => this.updateSummary()
       );
       this.logger.log('constructed', {
         allowedItemCount: this.allowedItems.length,
-        hasUnsettledData: Boolean(this.unsettledData)
+        hasUnsettledItems: this.unsettledItems.length > 0
       });
     }
 
@@ -244,6 +255,10 @@
       document
         .getElementById('addRowBtn')
         .addEventListener('click', () => this.addRow());
+
+      if (this.settlementTargetSelect) {
+        this.settlementTargetSelect.addEventListener('change', (e) => this.handleSettlementTargetChange(e));
+      }
 
       this.typeSelect.addEventListener('change', () => this.handleTypeChange());
       this.form.addEventListener('submit', (event) => this.handleFormSubmit(event));
@@ -289,10 +304,10 @@
 
     startSettlement() {
       this.logger.log('startSettlement', {
-        hasUnsettledData: Boolean(this.unsettledData)
+        hasUnsettledItems: this.unsettledItems.length > 0
       });
-      if (!this.unsettledData) {
-        alert('現在、通常精算が必要な通常請求はありません。');
+      if (this.unsettledItems.length === 0) {
+        alert('現在、通常精算が必要な請求はありません。');
         return;
       }
 
@@ -339,6 +354,7 @@
       const resolvedType = this.resolveApplicationType(this.typeSelect.value);
 
       return {
+        mode: 'application',
         title: '支出申請',
         requestType: resolvedType,
         showTypeSelector: true,
@@ -354,6 +370,7 @@
 
     buildSettlementState() {
       return {
+        mode: 'settlement',
         title: '通常精算手続き',
         requestType: '通常精算',
         showTypeSelector: false,
@@ -393,10 +410,8 @@
         this.fileInput.value = '';
       }
 
-      if (this.unsettledData) {
-        this.preAmountDisplay.textContent = `¥${Number(this.unsettledData.amount).toLocaleString()}`;
-      } else {
-        this.preAmountDisplay.textContent = '¥0';
+      if (state.mode === 'settlement') {
+        this.populateSettlementTargets();
       }
 
       this.renderTypeRestrictionNote();
@@ -411,7 +426,7 @@
         .map((type) => `${type.label}: ${type.reason}`);
 
       startApplicationBtn.disabled = !this.hasAvailableApplicationType();
-      startSettlementBtn.disabled = !this.unsettledData;
+      startSettlementBtn.disabled = this.unsettledItems.length === 0;
 
       if (blockedMessages.length === 0) {
         restrictionBox.style.display = 'none';
@@ -461,6 +476,36 @@
       });
     }
 
+    populateSettlementTargets() {
+      if (!this.settlementTargetSelect) return;
+      this.settlementTargetSelect.innerHTML = '';
+
+      this.unsettledItems.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `[${item.date}] ${item.content} (¥${Number(item.amount).toLocaleString()})`;
+        this.settlementTargetSelect.appendChild(option);
+      });
+
+      if (this.unsettledItems.length > 0) {
+        this.settlementTargetSelect.value = this.unsettledItems[0].id;
+        this.currentUnsettledItem = this.unsettledItems[0];
+        this.preAmountDisplay.textContent = `¥${Number(this.currentUnsettledItem.amount).toLocaleString()}`;
+      }
+    }
+
+    handleSettlementTargetChange(event) {
+      const selectedId = event.target.value;
+      this.currentUnsettledItem = this.unsettledItems.find(item => item.id === selectedId) || null;
+
+      if (this.currentUnsettledItem) {
+        this.preAmountDisplay.textContent = `¥${Number(this.currentUnsettledItem.amount).toLocaleString()}`;
+      } else {
+        this.preAmountDisplay.textContent = '¥0';
+      }
+      this.updateSummary();
+    }
+
     getApplicationTypes() {
       return Array.isArray(this.bootstrap.applicationTypes)
         ? this.bootstrap.applicationTypes
@@ -492,8 +537,8 @@
         budgetLimit: this.budgetLimit
       });
 
-      if (this.mode === 'settlement' && this.unsettledData) {
-        const preAmount = Number(this.unsettledData.amount) || 0;
+      if (this.mode === 'settlement' && this.currentUnsettledItem) {
+        const preAmount = Number(this.currentUnsettledItem.amount) || 0;
         const balance = preAmount - total;
         this.settlementTotalDisplay.textContent = `¥${total.toLocaleString()}`;
 
@@ -581,8 +626,6 @@
                 requestType: this.currentRequestType
               });
               alert(result.message);
-              // GASのiframeサンドボックスによるURL遷移のブロックを回避するため、
-              // ページ全体の再読み込みではなくSPAとしてフォームをリセットしダッシュボードへ戻します
               this.form.reset();
               this.itemsTable.reset(this.currentRequestType);
               this.fileInput.value = '';
@@ -733,7 +776,7 @@
   const userDashboardApp = new UserDashboardApp(
     USER_FORM_BOOTSTRAP,
     ALLOWED_ITEMS,
-    UNSETTLED_DATA
+    UNSETTLED_ITEMS
   );
 
   window.switchView = function (viewName) {
