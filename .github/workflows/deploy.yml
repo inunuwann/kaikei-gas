@@ -50,8 +50,11 @@ jobs:
 
       # 2. 現在のデプロイIDを維持したままバージョンを更新（WebアプリのURLは変わらない）
       - name: clasp deploy
-        # -i オプション: 上書き対象のデプロイID（Secretsから取得）
-        # -d オプション: デプロイ履歴に残るコメント（GitHubの実行番号とコミットハッシュの先頭7桁を付与）
-        run: npx clasp deploy -i "$DEPLOYMENT_ID" -d "Auto-deploy via GitHub Actions #${{ github.run_number }} (${GITHUB_SHA::7})"
         env:
           DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: |
+          if [ -z "$DEPLOYMENT_ID" ]; then
+            echo "Error: DEPLOYMENT_ID secret is missing!"
+            exit 1
+          fi
+          npx clasp deploy -i "$DEPLOYMENT_ID" -d "Auto-deploy via GitHub Actions #${{ github.run_number }}"
