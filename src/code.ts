@@ -394,7 +394,8 @@ function processForm(formObj: FormSubmissionInput) {
 
     const now = new Date();
     const newId = `EXP-${Utilities.formatDate(now, SCRIPT_TIME_ZONE, 'yyyyMMdd-HHmmss')}`;
-    const fileUrl = saveAttachmentFile(newId, formObj);
+    const adminEmails = getAdminEmails(repository);
+    const fileUrl = saveAttachmentFile(newId, formObj, adminEmails);
     const simpleContent = items.map((item) => item.item).join(', ');
     const initialStatus = requestType === STANDARD_REQUEST_TYPE ? '未精算' : '申請中';
 
@@ -565,7 +566,12 @@ function parseSubmittedItems(itemsJson: string | undefined) {
   return items;
 }
 
-function saveAttachmentFile(requestId: string, formObj: FormSubmissionInput): string {
+// 引数に adminEmails: string[] を追加します
+function saveAttachmentFile(
+  requestId: string,
+  formObj: FormSubmissionInput,
+  adminEmails: string[],
+): string {
   const logger = serverLogger.child('saveAttachmentFile', {
     requestId,
   });
@@ -583,10 +589,14 @@ function saveAttachmentFile(requestId: string, formObj: FormSubmissionInput): st
   const mimeType = String(formObj.mimeType ?? PDF_MIME_TYPE);
   const blob = Utilities.newBlob(Utilities.base64Decode(formObj.fileData), mimeType, fileName);
 
-  const url = DriveApp.getRootFolder()
-    .createFile(blob)
-    .setName(`${requestId}_${fileName}`)
-    .getUrl();
+  const file = DriveApp.getRootFolder().createFile(blob).setName(`${requestId}_${fileName}`);
+
+  // M_Adminシートのメンバーにのみ閲覧権限（Viewer）を付与する
+  if (adminEmails && adminEmails.length > 0) {
+    file.addViewers(adminEmails);
+  }
+
+  const url = file.getUrl();
   timer.end({ stored: true, url });
   return url;
 }
