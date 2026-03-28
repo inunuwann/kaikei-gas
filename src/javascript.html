@@ -530,7 +530,9 @@
     }
 
     updateSummary() {
-      const total = this.itemsTable.calculateTotal();
+      // ▼ ここを変更：calculateTotal()を呼ばずに、すでに計算されたDOMの値を読み取ることで無限ループを防止
+      const total = Number(this.grandTotalEl.dataset.value) || 0;
+
       this.logger.log('updateSummary', {
         mode: this.mode,
         total,
