@@ -65,6 +65,7 @@ interface FormSubmissionInput {
   fileName?: string | null;
   fileData?: string | null;
   mimeType?: string | null;
+  targetId?: string | null; // ← NEW: 対象のID
 }
 
 interface InquiryFormInput {
@@ -252,6 +253,20 @@ function updateStatus(type: string, rowIndex: number, newStatus: string) {
   }
 
   sheet.getRange(rowIndex, columnIndex).setValue(newStatus);
+
+  // カスケーディングアップデート（精算の承認時、紐づく支出も精算済にする）
+  if (type === 'expenditure' && newStatus === '精算済') {
+    const records = repository.getExpenditureRecords();
+    const updatedRecord = records.find((r) => r.rowIndex === rowIndex);
+
+    if (updatedRecord && updatedRecord.type === SETTLEMENT_TYPE && updatedRecord.targetId) {
+      const targetRecord = records.find((r) => r.id === updatedRecord.targetId);
+      if (targetRecord && targetRecord.rowIndex) {
+        sheet.getRange(targetRecord.rowIndex, columnIndex).setValue('精算済');
+      }
+    }
+  }
+
   timer.end({ success: true, sheetName: sheet.getName() });
   return { success: true };
 }
@@ -397,7 +412,8 @@ function processForm(formObj: FormSubmissionInput) {
     const adminEmails = getAdminEmails(repository);
     const fileUrl = saveAttachmentFile(newId, formObj, adminEmails);
     const simpleContent = items.map((item) => item.item).join(', ');
-    const initialStatus = requestType === STANDARD_REQUEST_TYPE ? '未精算' : '申請中';
+    const initialStatus = '申請中'; // どの申請も必ず最初は「申請中」
+    const targetId = formObj.targetId || ''; // 精算対象となる元のID
 
     expenditureSheet.appendRow([
       newId,
@@ -409,6 +425,7 @@ function processForm(formObj: FormSubmissionInput) {
       `${simpleContent} (詳細あり)`,
       fileUrl,
       '未',
+      targetId, // J列: 精算対象ID
     ]);
 
     const mailBody = [

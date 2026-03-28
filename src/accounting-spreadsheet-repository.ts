@@ -86,7 +86,7 @@ export class AccountingSpreadsheetRepository {
 
   constructor(
     spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet,
-    cacheStore: JsonCacheStore = new JsonCacheStore(),
+    cacheStore = new JsonCacheStore(),
   ) {
     this.spreadsheet = spreadsheet;
     this.cacheStore = cacheStore;
@@ -232,11 +232,11 @@ export class AccountingSpreadsheetRepository {
   }
 }
 
-export function extractAdminEmails(rows: unknown[][]): string[] {
+function extractAdminEmails(rows: unknown[][]): string[] {
   return rows.map((row) => String(row[1] ?? '').trim()).filter((email) => email.includes('@'));
 }
 
-export function extractUsers(rows: unknown[][]): UserMasterRecord[] {
+function extractUsers(rows: unknown[][]): UserMasterRecord[] {
   return rows
     .map((row) => ({
       email: String(row[0] ?? '').trim(),
@@ -247,8 +247,8 @@ export function extractUsers(rows: unknown[][]): UserMasterRecord[] {
     .filter((user) => user.email);
 }
 
-export function extractAllowedItemsByGroup(rows: unknown[][]): AllowedItemsByGroup {
-  return rows.reduce<AllowedItemsByGroup>((groups, row) => {
+function extractAllowedItemsByGroup(rows: unknown[][]): AllowedItemsByGroup {
+  return rows.reduce((groups: AllowedItemsByGroup, row) => {
     const groupId = String(row[0] ?? '').trim();
     const name = String(row[1] ?? '').trim();
 
@@ -264,7 +264,6 @@ export function extractAllowedItemsByGroup(rows: unknown[][]): AllowedItemsByGro
       name,
       defaultPrice: row[2] ?? null,
     });
-
     return groups;
   }, {});
 }
@@ -273,7 +272,6 @@ function resolveScriptCache(): CacheAdapter | null {
   if (typeof CacheService === 'undefined') {
     return null;
   }
-
   return CacheService.getScriptCache();
 }
 
@@ -281,6 +279,7 @@ function readSheetBodyValues(sheet: GoogleAppsScript.Spreadsheet.Sheet | null): 
   const timer = repositoryLogger.startTimer('readSheetBodyValues', {
     sheetName: sheet ? sheet.getName() : null,
   });
+
   if (!sheet) {
     timer.end({ rowCount: 0, lastRow: 0, lastColumn: 0 });
     return [];
@@ -319,6 +318,7 @@ function mapExpenditureRow(
     content: String(row[6] ?? ''),
     file: String(row[7] ?? 'なし'),
     settlementFlag: String(row[8] ?? ''),
+    targetId: String(row[9] ?? ''), // ← 追加
   };
 }
 

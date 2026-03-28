@@ -530,7 +530,6 @@
     }
 
     updateSummary() {
-      // ▼ ここを変更：calculateTotal()を呼ばずに、すでに計算されたDOMの値を読み取ることで無限ループを防止
       const total = Number(this.grandTotalEl.dataset.value) || 0;
 
       this.logger.log('updateSummary', {
@@ -656,7 +655,8 @@
             itemsJson: JSON.stringify(items),
             fileName: fileInfo ? fileInfo.name : null,
             fileData: fileInfo ? fileInfo.data : null,
-            mimeType: fileInfo ? fileInfo.mime : null
+            mimeType: fileInfo ? fileInfo.mime : null,
+            targetId: this.mode === 'settlement' && this.currentUnsettledItem ? this.currentUnsettledItem.id : null // ← NEW: 対象のIDをサーバーへ送る
           });
       };
 

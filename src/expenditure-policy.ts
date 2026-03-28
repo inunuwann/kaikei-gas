@@ -17,11 +17,11 @@ import {
 } from './accounting-domain.ts';
 
 const ACTIVE_STATUSES_BY_TYPE: Record<ApplicationRequestType, Set<string>> = {
-  [STANDARD_REQUEST_TYPE]: new Set(['申請中', '承認済', '未精算']),
+  [STANDARD_REQUEST_TYPE]: new Set(['申請中', '承認済']),
   [REIMBURSEMENT_REQUEST_TYPE]: new Set(['申請中']),
 };
 
-const USED_BUDGET_STATUSES = new Set(['承認済', '精算完了']);
+const USED_BUDGET_STATUSES = new Set(['承認済', '精算済']);
 
 const REQUEST_BLOCK_MESSAGES: Record<ApplicationRequestType, string> = {
   [STANDARD_REQUEST_TYPE]: '未完了の通常請求があるため、新しい通常請求はできません。',
@@ -103,13 +103,9 @@ export class ExpenditureRequestPolicy {
     records: ExpenditureRecord[],
     formatDate: (date: Date) => string = defaultDateFormatter,
   ): UnsettledItem[] {
-    // 通常請求（事前）と事後請求のうち、未精算のものをすべて取得
+    // 申請された支出が「承認済」になったら精算を行えるようにする
     return records
-      .filter(
-        (record) =>
-          (record.type === STANDARD_REQUEST_TYPE || record.type === REIMBURSEMENT_REQUEST_TYPE) &&
-          record.status === '未精算',
-      )
+      .filter((record) => record.type === STANDARD_REQUEST_TYPE && record.status === '承認済')
       .sort(compareRecordsDesc)
       .map((target) => ({
         id: target.id,

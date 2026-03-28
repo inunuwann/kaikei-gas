@@ -38,6 +38,7 @@ export interface ExpenditureRecord {
   content: string;
   file: string;
   settlementFlag?: string;
+  targetId?: string; // ← 精算元を紐づけるIDを追加
 }
 
 export interface InquiryRecord {
@@ -52,59 +53,18 @@ export interface InquiryRecord {
   status: string;
 }
 
-export interface UserHistoryEntry {
-  id: string;
-  date: string;
-  type: string;
-  status: string;
-  amount: number;
-  content: string;
-}
-
-export interface UnsettledItem {
-  id: string;
-  amount: number;
-  content: string;
-  date: string;
-}
-
-export interface RequestAvailability {
-  allowed: boolean;
-  reason: string | null;
-  activeRecordId: string | null;
-}
-
-export type RequestAvailabilityMap = Record<ApplicationRequestType, RequestAvailability>;
-
-export interface AttachmentPayload {
-  fileName?: string | null;
-  mimeType?: string | null;
-}
-
-export interface UserFormTypeOption {
-  value: ApplicationRequestType;
-  label: string;
-  allowed: boolean;
-  reason: string | null;
-}
-
-export interface UserFormBootstrap {
-  receiptLabel: string;
-  fileAccept: string;
-  applicationTypes: UserFormTypeOption[];
-  requestAvailability: RequestAvailabilityMap;
-}
-
-export function isApplicationRequestType(value: string): value is ApplicationRequestType {
+export function isApplicationRequestType(value: string | null): value is ApplicationRequestType {
   return APPLICATION_TYPE_OPTIONS.some((type) => type === value);
 }
 
-export function normalizeApplicationRequestType(value: string): ApplicationRequestType | null {
+export function normalizeApplicationRequestType(
+  value: string | null | undefined,
+): ApplicationRequestType | null {
   const normalized = normalizeExpenditureType(value);
   return isApplicationRequestType(normalized) ? normalized : null;
 }
 
-export function normalizeExpenditureType(value: string): ExpenditureType | string {
+export function normalizeExpenditureType(value: string | null | undefined): ExpenditureType | null {
   const trimmed = String(value ?? '').trim();
   return EXPENDITURE_TYPE_ALIASES[trimmed as keyof typeof EXPENDITURE_TYPE_ALIASES] ?? trimmed;
 }
@@ -156,7 +116,7 @@ export function toDateKey(value: string | Date | null | undefined): string | nul
   return [date.getFullYear(), padNumber(date.getMonth() + 1), padNumber(date.getDate())].join('-');
 }
 
-export function stripDetailSuffix(content: string): string {
+export function stripDetailSuffix(content: string | null | undefined): string {
   return String(content ?? '')
     .replace(/\s*\(詳細あり\)\s*$/, '')
     .trim();
