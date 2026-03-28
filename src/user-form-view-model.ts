@@ -16,7 +16,7 @@ export type UserFormMode = 'application' | 'settlement';
 
 export interface UserFormContext {
   requestAvailability: RequestAvailabilityMap;
-  unsettledItems: UnsettledItem[]; // ← unsettledItem から unsettledItems に変更
+  unsettledItems: UnsettledItem[];
 }
 
 export interface UserFormState {

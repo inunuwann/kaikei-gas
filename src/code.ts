@@ -38,12 +38,12 @@ interface UserStatusViewData {
     amount: number;
     content: string;
   }>;
-  unsettledItems: {
+  unsettledItems: Array<{
     id: string;
     amount: number;
     content: string;
     date: string;
-  } | null;
+  }>;
   requestAvailability: RequestAvailabilityMap;
   formBootstrap: ReturnType<typeof UserFormViewModelFactory.buildBootstrap>;
   inquiries: Array<{
@@ -321,7 +321,7 @@ function buildUserStatusViewData(
     groupRecordCount: groupRecords.length,
     allowedItemCount: viewData.allowedItems.length,
     historyCount: viewData.history.length,
-    hasUnsettledItem: Boolean(viewData.unsettledItem),
+    hasUnsettledItem: viewData.unsettledItems.length > 0,
   });
   return viewData;
 }
@@ -565,7 +565,6 @@ function parseSubmittedItems(itemsJson: string | undefined) {
   return items;
 }
 
-// 引数に adminEmails: string[] を追加します
 function saveAttachmentFile(
   requestId: string,
   formObj: FormSubmissionInput,
@@ -590,7 +589,7 @@ function saveAttachmentFile(
 
   const file = DriveApp.getRootFolder().createFile(blob).setName(`${requestId}_${fileName}`);
 
-  // M_Adminシートのメンバーにのみ閲覧権限（Viewer）を付与する
+  // M_Adminシートのメンバーにのみ編集権限（Editor）を付与する
   if (adminEmails && adminEmails.length > 0) {
     file.addEditors(adminEmails);
   }

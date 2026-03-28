@@ -31,7 +31,7 @@ const REQUEST_BLOCK_MESSAGES: Record<ApplicationRequestType, string> = {
 export interface GroupAccountingSummary {
   usedAmount: number;
   remainingBudget: number;
-  unsettledItems: UnsettledItem[]; // ← unsettledItem から unsettledItems (配列)に変更
+  unsettledItems: UnsettledItem[];
   history: UserHistoryEntry[];
   requestAvailability: RequestAvailabilityMap;
 }
