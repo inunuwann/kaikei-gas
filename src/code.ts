@@ -592,7 +592,7 @@ function saveAttachmentFile(
 
   // M_Adminシートのメンバーにのみ閲覧権限（Viewer）を付与する
   if (adminEmails && adminEmails.length > 0) {
-    file.addViewers(adminEmails);
+    file.addEditors(adminEmails);
   }
 
   const url = file.getUrl();
