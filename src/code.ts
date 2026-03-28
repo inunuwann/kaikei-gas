@@ -420,7 +420,6 @@ function processForm(formObj: FormSubmissionInput) {
 
     GmailApp.sendEmail(userInfo.email, `【申請完了】${newId}`, mailBody);
 
-    const adminEmails = getAdminEmails(repository);
     if (adminEmails.length > 0) {
       GmailApp.sendEmail(
         adminEmails.join(','),
